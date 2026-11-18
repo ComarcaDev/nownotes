@@ -22,7 +22,7 @@ Ligera (unos 2 MB), moderna y sin cuentas: todo se guarda en tu equipo.
 - **Recordatorios** con notificación de Windows, ventana de aviso y sonido. Pueden repetirse (cada día, días laborables, semana, mes o año) y posponerse 5 min, 1 h o hasta mañana.
 - **Organización** con listas de colores, etiquetas, búsqueda y elementos fijados.
 - **Papelera** que guarda lo eliminado 10 días por si necesitas recuperarlo.
-- **Modo mínimo**: una ventana compacta tipo widget con Hoy, Tareas y Notas.
+- **Modo mínimo**: una ventana compacta tipo widget con Hoy, Tareas y Notas, buscador y selector de tarea o nota.
 - **Anclar la ventana** encima de todas las demás, en cualquiera de los dos modos.
 - **Diseño Windows 11** con efecto Mica. Tema oscuro por defecto y claro con un clic en el sol o la luna.
 - **Bandeja del sistema e inicio con Windows**, para que los avisos lleguen aunque cierres la ventana.
@@ -46,7 +46,8 @@ Requisitos: Windows 11 de 64 bits. No está probada en Windows 10.
 | --- | --- |
 | `Ctrl+Alt+N` | Captura rápida (desde cualquier programa) |
 | `Ctrl+N` | Escribir una tarea o nota nueva |
-| `Ctrl+F` | Buscar |
+| `Ctrl+F` | Buscar (también en modo mínimo) |
+| `Tab` | Alternar entre tarea y nota al escribir en Hoy, listas o etiquetas |
 | `Espacio` | Completar la tarea seleccionada |
 | `Enter` | Editar el título del elemento seleccionado |
 | `Supr` | Mover a la papelera (con opción de deshacer) |

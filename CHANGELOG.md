@@ -2,6 +2,17 @@
 
 Todos los cambios relevantes de Apunta se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [1.2.0] - 2026-11-18
+
+### Añadido
+- **Tarea o nota en «Hoy»**: la barra de creación de Hoy tiene un selector Tarea/Nota (solo iconos en modo compacto, con `Tab` para alternar). Tarea viene por defecto y, si eliges Nota, se recuerda también tras reiniciar.
+- **«Notas de hoy»**: la vista Hoy muestra, debajo de las tareas, las notas creadas hoy.
+- **Buscador en modo compacto**: un icono de lupa (o `Ctrl+F`) cambia las pestañas por un campo de búsqueda; `Esc` lo cierra.
+
+### Cambiado
+- En modo compacto y ventana estrecha, solo la pestaña activa muestra su nombre; las demás muestran icono y contador.
+- En modo compacto, crear una nota ya no abre el editor, para que la captura siga siendo rápida.
+
 ## [1.1.0] - 2026-11-18
 
 ### Añadido
@@ -50,5 +61,6 @@ Primera versión estable.
 ### Distribución
 - Instalador NSIS para el usuario actual (sin permisos de administrador) y versión portable en .zip, que guarda los datos junto al ejecutable.
 
+[1.2.0]: https://github.com/hujeanpaes/apunta/releases/tag/v1.2.0
 [1.1.0]: https://github.com/hujeanpaes/apunta/releases/tag/v1.1.0
 [1.0.0]: https://github.com/hujeanpaes/apunta/releases/tag/v1.0.0

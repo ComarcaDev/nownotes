@@ -22,6 +22,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("always_on_top", "0"),
     ("size_full", "1040,700"),
     ("size_mini", "380,560"),
+    ("today_kind", "task"),
 ];
 
 /// Días que un elemento permanece en la papelera antes de borrarse definitivamente.
@@ -174,6 +175,18 @@ pub fn end_of_today_ms() -> i64 {
         .earliest()
         .map(|t| t.timestamp_millis())
         .unwrap_or_else(now_ms)
+}
+
+/// Inicio (00:00 local) del día que contiene `ts_ms`.
+pub fn start_of_day(ts_ms: i64) -> i64 {
+    use chrono::{Local, TimeZone};
+    Local
+        .timestamp_millis_opt(ts_ms)
+        .single()
+        .and_then(|t| t.date_naive().and_hms_opt(0, 0, 0))
+        .and_then(|d| Local.from_local_datetime(&d).earliest())
+        .map(|t| t.timestamp_millis())
+        .unwrap_or(ts_ms - DAY_MS + 1)
 }
 
 // ---------- apertura y migraciones ----------
@@ -352,10 +365,16 @@ pub fn query_items(c: &Connection, f: &Filter, end_of_today: i64) -> R<Vec<Item>
         order = "done, updated_at DESC";
     } else {
         match f.view.as_str() {
+            // Tareas que vencen hoy o antes + notas creadas hoy («Notas de hoy»).
             "today" => {
-                wh.push("kind='task' AND done=0 AND COALESCE(due_at, remind_at) <= ?1".into());
+                wh.push(
+                    "done=0 AND ((kind='task' AND COALESCE(due_at, remind_at) <= ?1)
+                       OR (kind='note' AND created_at >= ?2))"
+                        .into(),
+                );
                 ps.push(Value::Integer(end_of_today));
-                order = "COALESCE(due_at, remind_at), created_at";
+                ps.push(Value::Integer(start_of_day(end_of_today)));
+                order = "kind='note', COALESCE(due_at, remind_at), created_at";
             }
             "upcoming" => {
                 wh.push("kind='task' AND done=0 AND COALESCE(due_at, remind_at) > ?1".into());
@@ -882,6 +901,28 @@ mod tests {
         let x = save_item(&c, &task("X", None, "none"), 1).unwrap();
         delete_forever(&c, x.id).unwrap();
         assert!(get_item(&c, x.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn today_includes_notes_created_today() {
+        let c = open_in_memory().unwrap();
+        let eot = end_of_today_ms();
+        let sod = start_of_day(eot);
+        assert!(sod < eot && eot - sod < DAY_MS + 3_600_000);
+        let mut note = task("Idea de hoy", None, "none");
+        note.kind = "note".into();
+        let today = save_item(&c, &note, sod + 1_000).unwrap();
+        let mut old = note.clone();
+        old.title = "Idea de ayer".into();
+        save_item(&c, &old, sod - 1_000).unwrap();
+        let mut due = task("Tarea de hoy", None, "none");
+        due.due_at = Some(sod);
+        save_item(&c, &due, 1).unwrap();
+        let items = query_items(&c, &f("today"), eot).unwrap();
+        let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(titles, vec!["Tarea de hoy", "Idea de hoy"]); // tareas primero
+        assert_eq!(items[1].id, today.id);
+        assert_eq!(counts(&c, eot).unwrap().today, 1); // el contador solo cuenta tareas
     }
 
     #[test]

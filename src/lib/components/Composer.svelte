@@ -1,5 +1,6 @@
 <script lang="ts">
   // Barra para crear tareas o notas: clic en «+»/«Añadir» o Enter.
+  import { onMount, untrack } from "svelte";
   import { slide } from "svelte/transition";
   import Icon from "./Icon.svelte";
   import ReminderPicker from "./ReminderPicker.svelte";
@@ -13,11 +14,33 @@
     input = $bindable(),
   }: { filter: Filter; oncreated: (it: Item) => void; compact?: boolean; input?: HTMLInputElement } = $props();
 
+  // Tipo fijo según la vista; en Hoy, listas y etiquetas se puede elegir.
   const fixedKind = $derived<Kind | null>(
-    filter.view === "notes" ? "note" : filter.view === "list" || filter.view === "tag" ? null : "task"
+    filter.view === "notes" ? "note" : ["today", "list", "tag"].includes(filter.view) ? null : "task"
   );
   let chosenKind = $state<Kind>("task");
+  // Preferencia recordada para «Hoy» (tarea por defecto).
+  let todayKind: Kind = "task";
   const kind = $derived<Kind>(fixedKind ?? chosenKind);
+
+  onMount(async () => {
+    try {
+      const s = await api.settings();
+      todayKind = s.today_kind === "note" ? "note" : "task";
+      if (filter.view === "today") chosenKind = todayKind;
+    } catch {
+      /* sin backend */
+    }
+  });
+
+  function setKind(k: Kind) {
+    chosenKind = k;
+    if (filter.view === "today" && k !== todayKind) {
+      todayKind = k;
+      api.setSetting("today_kind", k).catch(() => {});
+    }
+    input?.focus();
+  }
 
   const defaultDue = () => (filter.view === "today" ? startOfDay().getTime() : filter.view === "upcoming" ? at(1, 0) : null);
 
@@ -33,6 +56,12 @@
   $effect(() => {
     void filter.view; void filter.listId; void filter.tag;
     reset();
+  });
+
+  // Al cambiar de vista: el tipo vuelve al preferido (Hoy) o a tarea.
+  $effect(() => {
+    const v = filter.view;
+    untrack(() => (chosenKind = v === "today" ? todayKind : "task"));
   });
 
   function reset() {
@@ -99,12 +128,32 @@
       onkeydown={(e) => {
         if (e.key === "Enter") { e.preventDefault(); create(); }
         if (e.key === "Escape") { reset(); e.currentTarget.blur(); }
+        if (e.key === "Tab" && !e.shiftKey && fixedKind == null) {
+          e.preventDefault();
+          setKind(chosenKind === "task" ? "note" : "task");
+        }
       }}
     />
     {#if fixedKind == null}
-      <div class="segmented kind">
-        <button class:active={chosenKind === "task"} onclick={() => (chosenKind = "task")}>Tarea</button>
-        <button class:active={chosenKind === "note"} onclick={() => (chosenKind = "note")}>Nota</button>
+      <div class="segmented kind" class:icons={compact} role="radiogroup" aria-label="Tipo">
+        <button
+          role="radio"
+          aria-checked={chosenKind === "task"}
+          class:active={chosenKind === "task"}
+          title="Crear tarea  (Tab para cambiar)"
+          onclick={() => setKind("task")}
+        >
+          {#if compact}<Icon name="tasks" size={14} />{:else}Tarea{/if}
+        </button>
+        <button
+          role="radio"
+          aria-checked={chosenKind === "note"}
+          class:active={chosenKind === "note"}
+          title="Crear nota  (Tab para cambiar)"
+          onclick={() => setKind("note")}
+        >
+          {#if compact}<Icon name="note" size={14} />{:else}Nota{/if}
+        </button>
       </div>
     {/if}
     <button class="add" class:ready={canSubmit} disabled={!canSubmit} onclick={create} title="Añadir (Enter)">
@@ -172,7 +221,7 @@
   .compact { margin: 0 12px 10px; }
   .compact .add { padding: 5px 6px; }
   .compact .extras { padding-left: 12px; }
-  .compact .kind button { padding: 2px 7px; }
+  .kind.icons button { display: grid; place-items: center; padding: 3px 7px; }
   .sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; }
   .date { position: relative; display: inline-flex; }
   .date input { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; padding: 0; border: 0; }

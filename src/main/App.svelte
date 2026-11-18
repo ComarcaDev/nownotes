@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import { fade } from "svelte/transition";
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { api, type Counts, type Filter, type Item, type ItemInput, type List, type TagCount } from "../lib/api";
@@ -109,6 +110,21 @@
     return () => clearTimeout(t);
   });
 
+  // ---------- búsqueda del modo mínimo ----------
+  let miniSearch = $state(false);
+
+  async function openMiniSearch() {
+    miniSearch = true;
+    closeEditor();
+    await tick();
+    searchEl?.focus();
+  }
+
+  function closeMiniSearch() {
+    searchText = "";
+    miniSearch = false;
+  }
+
   // ---------- selección ----------
   function select(it: Item) {
     selectedId = it.id;
@@ -193,7 +209,16 @@
     if (e.ctrlKey && !e.shiftKey && k === "m") { e.preventDefault(); toggleMode(); return; }
     if (e.ctrlKey && !e.shiftKey && k === "p") { e.preventDefault(); toggleOnTop(); return; }
     if (e.ctrlKey && k === "n") { e.preventDefault(); newEl?.focus(); return; }
-    if (e.ctrlKey && k === "f") { e.preventDefault(); searchEl?.focus(); searchEl?.select(); return; }
+    if (e.ctrlKey && k === "f") {
+      e.preventDefault();
+      if (mini && !miniSearch) openMiniSearch();
+      else { searchEl?.focus(); searchEl?.select(); }
+      return;
+    }
+    if (e.key === "Escape" && mini && miniSearch && document.activeElement === searchEl) {
+      closeMiniSearch();
+      return;
+    }
     if (e.key === "Escape") {
       if (searchText && document.activeElement === searchEl) { searchText = ""; return; }
       if (isTyping(e)) (e.target as HTMLElement).blur();
@@ -240,7 +265,22 @@
 {#if mini}
   <div class="mini">
     <header class="mini-head">
-      <div class="tabs" role="tablist">
+      {#if miniSearch}
+        <div class="mini-search" in:fade={{ duration: 120 }}>
+          <Icon name="search" size={14} />
+          <input
+            type="search"
+            placeholder="Buscar tareas y notas…"
+            aria-label="Buscar"
+            bind:value={searchText}
+            bind:this={searchEl}
+          />
+          <button class="icon-btn close" title="Cerrar búsqueda  (Esc)" aria-label="Cerrar búsqueda" onclick={closeMiniSearch}>
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+      {:else}
+      <div class="tabs" role="tablist" in:fade={{ duration: 120 }}>
         {#each MINI_TABS as t (t.view)}
           {@const n = counts[t.view]}
           <button
@@ -257,6 +297,10 @@
           </button>
         {/each}
       </div>
+      <button class="icon-btn tb-search" title="Buscar  (Ctrl+F)" aria-label="Buscar" onclick={openMiniSearch}>
+        <Icon name="search" size={16} />
+      </button>
+      {/if}
       <WindowToolbar />
     </header>
     {#if selectedItem}
@@ -269,11 +313,11 @@
         {filter}
         {lists}
         {selectedId}
-        searching={false}
+        {searching}
         {shortcut}
         {actions}
         compact
-        oncreated={(it) => { if (it.kind === "note") select(it); }}
+        oncreated={() => {}}
         bind:newInput={newEl}
       />
     {/if}
@@ -369,7 +413,22 @@
   .tab:hover { color: var(--text); }
   .tab.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); }
   .tab .n { font-size: 11px; color: var(--accent); font-weight: 600; }
-  @media (max-width: 360px) { .tab span:not(.n) { display: none; } }
+  .tab :global(svg) { flex: none; }
+  /* Ventana estrecha: solo la pestaña activa muestra su nombre; las demás, icono y contador. */
+  @media (max-width: 440px) {
+    .tab:not(.active) { flex: 0 0 auto; padding: 5px 9px; }
+    .tab:not(.active) span:not(.n) { display: none; }
+  }
+  .tb-search { width: 32px; height: 32px; border-radius: 6px; flex: none; }
+  .mini-search {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 2px 0 10px; height: 34px;
+    background: var(--control); border: 1px solid var(--border); border-bottom: 2px solid var(--accent);
+    border-radius: 8px; color: var(--text-2);
+  }
+  .mini-search input { flex: 1; min-width: 0; border: none; background: transparent; padding: 4px 2px; }
+  .mini-search input:focus { border: none; padding-bottom: 4px; background: transparent; }
+  .mini-search input::-webkit-search-cancel-button { display: none; }
+  .mini-search .close { width: 26px; height: 26px; }
 
   .search {
     display: flex; align-items: center; gap: 6px; padding: 0 8px; width: 200px; flex: none;

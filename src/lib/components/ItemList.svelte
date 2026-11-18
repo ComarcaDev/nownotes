@@ -63,11 +63,11 @@
         const sod = startOfDay().getTime();
         const overdue = tasks.filter((t) => startOfDay(t.dueAt ?? t.remindAt ?? 0).getTime() < sod);
         const rest = tasks.filter((t) => !overdue.includes(t));
-        if (!overdue.length) return [{ key: "today", label: "", tasks: rest, notes: [] }];
-        return [
-          { key: "overdue", label: "Vencidas", tone: "danger", tasks: overdue, notes: [] },
-          { key: "today", label: "Hoy", tasks: rest, notes: [] },
-        ];
+        const out: Section[] = [];
+        if (overdue.length) out.push({ key: "overdue", label: "Vencidas", tone: "danger", tasks: overdue, notes: [] });
+        out.push({ key: "today", label: overdue.length || notes.length ? "Tareas" : "", tasks: rest, notes: [] });
+        out.push({ key: "notes-today", label: "Notas de hoy", tasks: [], notes });
+        return out;
       }
       case "upcoming":
         return groupByDay(tasks, (t) => t.dueAt ?? t.remindAt ?? 0);
