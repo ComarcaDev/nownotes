@@ -1,7 +1,9 @@
 //! Creación y gestión de las tres ventanas: principal, captura rápida y aviso.
 
 use tauri::window::{Effect, EffectsBuilder};
-use tauri::{AppHandle, Emitter, Manager, Theme, WebviewUrl, WebviewWindowBuilder, Wry};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, Theme, WebviewUrl, WebviewWindowBuilder, Wry,
+};
 
 use crate::{db, AppState};
 
@@ -40,13 +42,89 @@ fn base<'a>(
     b
 }
 
+// ---------- modos de ventana (completo / mínimo) ----------
+
+const MIN_FULL: (f64, f64) = (760.0, 480.0);
+const MIN_MINI: (f64, f64) = (320.0, 400.0);
+
+fn min_for(mode: &str) -> (f64, f64) {
+    if mode == "mini" {
+        MIN_MINI
+    } else {
+        MIN_FULL
+    }
+}
+
+/// "1040,700" → (1040.0, 700.0), respetando el mínimo del modo.
+fn parse_size(value: &str, mode: &str) -> (f64, f64) {
+    let min = min_for(mode);
+    let mut it = value.split(',').map(|v| v.trim().parse::<f64>().ok());
+    match (it.next().flatten(), it.next().flatten()) {
+        (Some(w), Some(h)) => (w.max(min.0), h.max(min.1)),
+        _ if mode == "mini" => (380.0, 560.0),
+        _ => (1040.0, 700.0),
+    }
+}
+
+/// Guarda el tamaño actual de la ventana principal como el del modo activo.
+pub fn save_size(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    if w.is_maximized().unwrap_or(false) || w.is_minimized().unwrap_or(false) {
+        return;
+    }
+    let (Ok(size), Ok(scale)) = (w.inner_size(), w.scale_factor()) else {
+        return;
+    };
+    let logical = size.to_logical::<f64>(scale);
+    let st = app.state::<AppState>();
+    let c = st.db.lock().unwrap();
+    let mode = db::get_setting(&c, "ui_mode");
+    let _ = db::set_setting(
+        &c,
+        &format!("size_{mode}"),
+        &format!("{},{}", logical.width.round(), logical.height.round()),
+    );
+}
+
+/// Cambia de modo: guarda el tamaño del modo saliente y aplica el del nuevo.
+pub fn apply_mode(app: &AppHandle, mode: &str) -> tauri::Result<()> {
+    let Some(w) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+    save_size(app);
+    let size = {
+        let st = app.state::<AppState>();
+        let c = st.db.lock().unwrap();
+        let _ = db::set_setting(&c, "ui_mode", mode);
+        parse_size(&db::get_setting(&c, &format!("size_{mode}")), mode)
+    };
+    if w.is_maximized()? {
+        w.unmaximize()?;
+    }
+    let min = min_for(mode);
+    w.set_min_size(Some(LogicalSize::new(min.0, min.1)))?;
+    w.set_size(LogicalSize::new(size.0, size.1))?;
+    Ok(())
+}
+
 /// Crea la ventana principal oculta; la interfaz la muestra al terminar de pintar.
 /// Si en 4 s no lo ha hecho (p. ej. error de carga), se muestra igualmente.
 pub fn create_main(app: &AppHandle, show: bool) -> tauri::Result<()> {
+    let (mode, size, on_top) = {
+        let st = app.state::<AppState>();
+        let c = st.db.lock().unwrap();
+        let mode = db::get_setting(&c, "ui_mode");
+        let size = parse_size(&db::get_setting(&c, &format!("size_{mode}")), &mode);
+        (mode, size, db::get_setting(&c, "always_on_top") == "1")
+    };
+    let min = min_for(&mode);
     base(app, "main", "index.html")
         .title("Apunta")
-        .inner_size(1040.0, 700.0)
-        .min_inner_size(760.0, 480.0)
+        .inner_size(size.0, size.1)
+        .min_inner_size(min.0, min.1)
+        .always_on_top(on_top)
         .center()
         .visible(false)
         .transparent(true)

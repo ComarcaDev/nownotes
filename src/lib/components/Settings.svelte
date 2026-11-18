@@ -130,14 +130,6 @@
 
       <section>
         <h3>General</h3>
-        <div class="row">
-          <div>Tema</div>
-          <select value={s.theme} onchange={(e) => setKey("theme", e.currentTarget.value)}>
-            <option value="system">Según Windows</option>
-            <option value="light">Claro</option>
-            <option value="dark">Oscuro</option>
-          </select>
-        </div>
         <label class="row">
           <div><div>Seguir en la bandeja al cerrar</div><div class="faint small">Necesario para recibir avisos con la ventana cerrada.</div></div>
           <input type="checkbox" class="toggle" checked={s.close_to_tray !== "0"} onchange={(e) => setKey("close_to_tray", e.currentTarget.checked ? "1" : "0")} />

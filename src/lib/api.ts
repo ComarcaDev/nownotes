@@ -2,7 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type Kind = "task" | "note";
 export type Recur = "none" | "daily" | "weekdays" | "weekly" | "monthly" | "yearly";
-export type View = "today" | "upcoming" | "tasks" | "notes" | "done" | "list" | "tag";
+export type View = "today" | "upcoming" | "tasks" | "notes" | "done" | "list" | "tag" | "trash";
+export type UiMode = "full" | "mini";
 
 export interface Item {
   id: number;
@@ -19,6 +20,7 @@ export interface Item {
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
+  deletedAt: number | null;
   tags: string[];
 }
 
@@ -37,7 +39,7 @@ export interface ItemInput {
 
 export interface List { id: number; name: string; color: string; sort: number; count: number }
 export interface TagCount { name: string; count: number }
-export interface Counts { today: number; upcoming: number; tasks: number; notes: number; done: number }
+export interface Counts { today: number; upcoming: number; tasks: number; notes: number; done: number; trash: number }
 export interface Filter { view: View; listId?: number | null; tag?: string | null; search?: string | null }
 export type Settings = Record<string, string>;
 export interface Info { dataDir: string; portable: boolean; version: string }
@@ -66,4 +68,8 @@ export const api = {
   openQuick: () => invoke<void>("open_quick"),
   startupMinimized: () => invoke<boolean>("startup_minimized"),
   clearDone: () => invoke<number>("clear_done"),
+  restoreItem: (id: number) => invoke<void>("restore_item", { id }),
+  deleteForever: (id: number) => invoke<void>("delete_forever", { id }),
+  emptyTrash: () => invoke<number>("empty_trash"),
+  setUiMode: (mode: UiMode) => invoke<void>("set_ui_mode", { mode }),
 };

@@ -17,6 +17,7 @@
     shortcut,
     actions,
     oncreated,
+    compact = false,
     newInput = $bindable(),
   }: {
     items: Item[];
@@ -27,6 +28,7 @@
     shortcut: string;
     actions: ItemActions;
     oncreated: (it: Item) => void;
+    compact?: boolean;
     newInput?: HTMLInputElement;
   } = $props();
 
@@ -113,9 +115,9 @@
   }
 </script>
 
-<div class="wrap">
+<div class="wrap" class:compact>
   {#if canAdd}
-    <Composer {filter} {oncreated} bind:input={newInput} />
+    <Composer {filter} {oncreated} {compact} bind:input={newInput} />
   {/if}
 
   <div class="list">
@@ -142,7 +144,11 @@
             hideToday={filter.view === "today" && !searching}
           />
         {/each}
-        {#if s.notes.length}
+        {#if s.notes.length && compact}
+          {#each s.notes as it (it.id)}
+            <ItemRow item={it} list={listById.get(it.listId)} {showList} selected={it.id === selectedId} {actions} />
+          {/each}
+        {:else if s.notes.length}
           <div class="grid">
             {#each s.notes as it (it.id)}
               <NoteCard item={it} list={listById.get(it.listId)} {showList} selected={it.id === selectedId} {actions} />
@@ -173,4 +179,7 @@
     background: var(--accent-soft); color: var(--accent); margin-bottom: 8px;
   }
   .empty-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+  .compact .list { padding: 0 12px 12px; }
+  .compact .empty { padding: 32px 16px; }
+  .compact .empty-icon { width: 56px; height: 56px; }
 </style>

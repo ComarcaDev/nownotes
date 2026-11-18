@@ -2,6 +2,23 @@
 
 Todos los cambios relevantes de Apunta se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [1.1.0] - 2026-11-18
+
+### Añadido
+- **Papelera**: lo que eliminas se guarda 10 días, con opciones para restaurar o eliminar para siempre y «Vaciar papelera». Pasado ese plazo se borra solo. «Deshacer» recupera el mismo elemento.
+- **Anclar la ventana** encima de todas las demás (`Ctrl+P`), en modo completo y en modo mínimo.
+- **Modo mínimo** (`Ctrl+M`): ventana compacta tipo widget con pestañas Hoy, Tareas y Notas, creación rápida y editor a pantalla completa. Cada modo recuerda su tamaño.
+- **Tema claro y oscuro** con un solo icono de sol o luna (`Ctrl+Mayús+L`).
+- La app recuerda al reiniciar el modo, el tamaño, el anclado y el tema.
+
+### Cambiado
+- El tema oscuro pasa a ser el predeterminado y el selector de tema sale de Ajustes.
+- «Vaciar completadas» mueve los elementos a la papelera en lugar de borrarlos.
+- La base de datos se migra automáticamente (esquema v2) sin perder datos.
+
+### Corregido
+- Con poca altura de ventana, el título del editor podía quedar oculto.
+
 ## [1.0.0] - 2026-11-18
 
 Primera versión estable.
@@ -33,4 +50,5 @@ Primera versión estable.
 ### Distribución
 - Instalador NSIS para el usuario actual (sin permisos de administrador) y versión portable en .zip, que guarda los datos junto al ejecutable.
 
+[1.1.0]: https://github.com/hujeanpaes/apunta/releases/tag/v1.1.0
 [1.0.0]: https://github.com/hujeanpaes/apunta/releases/tag/v1.0.0

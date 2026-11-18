@@ -15,10 +15,23 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("sound", "chime"),
     ("sound_path", ""),
     ("volume", "0.7"),
-    ("theme", "system"),
+    ("theme", "dark"),
     ("close_to_tray", "1"),
     ("native_toast", "1"),
+    ("ui_mode", "full"),
+    ("always_on_top", "0"),
+    ("size_full", "1040,700"),
+    ("size_mini", "380,560"),
 ];
+
+/// Días que un elemento permanece en la papelera antes de borrarse definitivamente.
+pub const TRASH_DAYS: i64 = 10;
+const DAY_MS: i64 = 86_400_000;
+
+const SCHEMA_V2: &str = "
+ALTER TABLE items ADD COLUMN deleted_at INTEGER;
+CREATE INDEX IF NOT EXISTS idx_items_deleted ON items(deleted_at);
+";
 
 const SCHEMA_V1: &str = "
 CREATE TABLE IF NOT EXISTS lists(
@@ -76,6 +89,9 @@ pub struct Item {
     pub pinned: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    /// Momento en que se movió a la papelera (None = no está en la papelera).
+    #[serde(default)]
+    pub deleted_at: Option<i64>,
     #[serde(default)]
     pub tags: Vec<String>,
 }
@@ -123,6 +139,7 @@ pub struct Counts {
     pub tasks: i64,
     pub notes: i64,
     pub done: i64,
+    pub trash: i64,
 }
 
 #[derive(Deserialize, Debug)]
@@ -182,6 +199,10 @@ fn init(c: &Connection) -> R<()> {
         c.execute_batch(SCHEMA_V1)?;
         c.pragma_update(None, "user_version", 1)?;
     }
+    if v < 2 {
+        c.execute_batch(SCHEMA_V2)?;
+        c.pragma_update(None, "user_version", 2)?;
+    }
     Ok(())
 }
 
@@ -229,7 +250,10 @@ pub fn set_setting(c: &Connection, key: &str, value: &str) -> R<()> {
 
 // ---------- elementos ----------
 
-const ITEM_COLS: &str = "id, kind, title, body, list_id, done, done_at, due_at, remind_at, recur, snoozed_until, pinned, created_at, updated_at";
+const ITEM_COLS: &str = "id, kind, title, body, list_id, done, done_at, due_at, remind_at, recur, snoozed_until, pinned, created_at, updated_at, deleted_at";
+
+/// Condición SQL para excluir lo que está en la papelera.
+const ALIVE: &str = "deleted_at IS NULL";
 
 fn map_item(r: &Row) -> R<Item> {
     Ok(Item {
@@ -247,6 +271,7 @@ fn map_item(r: &Row) -> R<Item> {
         pinned: r.get(11)?,
         created_at: r.get(12)?,
         updated_at: r.get(13)?,
+        deleted_at: r.get(14)?,
         tags: vec![],
     })
 }
@@ -317,8 +342,12 @@ pub fn query_items(c: &Connection, f: &Filter, end_of_today: i64) -> R<Vec<Item>
     let order: &str;
     let search = f.search.as_deref().map(str::trim).filter(|s| !s.is_empty());
 
-    if let Some(q) = search {
+    if f.view == "trash" && search.is_none() {
+        wh.push("deleted_at IS NOT NULL".into());
+        order = "deleted_at DESC";
+    } else if let Some(q) = search {
         wh.push("(title LIKE ?1 OR body LIKE ?1)".into());
+        wh.push(ALIVE.into());
         ps.push(Value::Text(format!("%{q}%")));
         order = "done, updated_at DESC";
     } else {
@@ -357,6 +386,7 @@ pub fn query_items(c: &Connection, f: &Filter, end_of_today: i64) -> R<Vec<Item>
                 order = TASK_ORDER;
             }
         }
+        wh.push(ALIVE.into());
     }
 
     let sql = format!(
@@ -415,23 +445,64 @@ pub fn save_item(c: &Connection, inp: &ItemInput, now: i64) -> R<Item> {
     get_item(c, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
 }
 
-/// Borra definitivamente todos los elementos completados. Devuelve cuántos se borraron.
-pub fn clear_done(c: &Connection) -> R<usize> {
-    let n = c.execute("DELETE FROM items WHERE done = 1", [])?;
-    c.execute(
-        "DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM item_tags)",
-        [],
-    )?;
-    Ok(n)
-}
+// ---------- papelera ----------
 
-pub fn delete_item(c: &Connection, id: i64) -> R<()> {
-    c.execute("DELETE FROM items WHERE id = ?1", [id])?;
+fn drop_orphan_tags(c: &Connection) -> R<()> {
     c.execute(
         "DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM item_tags)",
         [],
     )?;
     Ok(())
+}
+
+/// Mueve todos los completados a la papelera. Devuelve cuántos se movieron.
+pub fn clear_done(c: &Connection, now: i64) -> R<usize> {
+    c.execute(
+        "UPDATE items SET deleted_at=?1, snoozed_until=NULL WHERE done=1 AND deleted_at IS NULL",
+        [now],
+    )
+}
+
+/// Mueve un elemento a la papelera (se puede restaurar durante `TRASH_DAYS` días).
+pub fn delete_item(c: &Connection, id: i64, now: i64) -> R<()> {
+    c.execute(
+        "UPDATE items SET deleted_at=?2, snoozed_until=NULL WHERE id=?1",
+        params![id, now],
+    )?;
+    Ok(())
+}
+
+pub fn restore_item(c: &Connection, id: i64) -> R<()> {
+    c.execute("UPDATE items SET deleted_at=NULL WHERE id=?1", [id])?;
+    // Si su lista se borró mientras estaba en la papelera, vuelve a la bandeja de entrada.
+    c.execute(
+        "UPDATE items SET list_id=1 WHERE id=?1 AND list_id NOT IN (SELECT id FROM lists)",
+        [id],
+    )?;
+    Ok(())
+}
+
+pub fn delete_forever(c: &Connection, id: i64) -> R<()> {
+    c.execute("DELETE FROM items WHERE id=?1", [id])?;
+    drop_orphan_tags(c)
+}
+
+pub fn empty_trash(c: &Connection) -> R<usize> {
+    let n = c.execute("DELETE FROM items WHERE deleted_at IS NOT NULL", [])?;
+    drop_orphan_tags(c)?;
+    Ok(n)
+}
+
+/// Borra definitivamente lo que lleva más de `TRASH_DAYS` días en la papelera.
+pub fn purge_trash(c: &Connection, now: i64) -> R<usize> {
+    let n = c.execute(
+        "DELETE FROM items WHERE deleted_at IS NOT NULL AND deleted_at <= ?1",
+        [now - TRASH_DAYS * DAY_MS],
+    )?;
+    if n > 0 {
+        drop_orphan_tags(c)?;
+    }
+    Ok(n)
 }
 
 /// Marca/desmarca. En tareas que se repiten, "hecha" mueve las fechas a la siguiente repetición.
@@ -473,7 +544,7 @@ pub fn fire_due(c: &Connection, now: i64) -> R<Vec<i64>> {
     let rows: Vec<DueRow> = {
         let mut st = c.prepare(
             "SELECT id, recur, remind_at, due_at, snoozed_until IS NOT NULL FROM items
-             WHERE done=0 AND (
+             WHERE done=0 AND deleted_at IS NULL AND (
                (snoozed_until IS NOT NULL AND snoozed_until <= ?1) OR
                (snoozed_until IS NULL AND notified=0 AND remind_at IS NOT NULL AND remind_at <= ?1))",
         )?;
@@ -548,7 +619,7 @@ pub fn complete_from_alert(c: &Connection, id: i64, now: i64) -> R<()> {
 pub fn list_lists(c: &Connection) -> R<Vec<List>> {
     let mut st = c.prepare(
         "SELECT l.id, l.name, l.color, l.sort,
-                (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id AND i.done = 0)
+                (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id AND i.done = 0 AND i.deleted_at IS NULL)
          FROM lists l ORDER BY l.sort, l.id",
     )?;
     let v = st
@@ -601,7 +672,8 @@ pub fn delete_list(c: &Connection, id: i64) -> R<()> {
 pub fn list_tags(c: &Connection) -> R<Vec<TagCount>> {
     let mut st = c.prepare(
         "SELECT t.name, SUM(CASE WHEN i.done = 0 THEN 1 ELSE 0 END)
-         FROM tags t JOIN item_tags it ON it.tag_id = t.id JOIN items i ON i.id = it.item_id
+         FROM tags t JOIN item_tags it ON it.tag_id = t.id
+           JOIN items i ON i.id = it.item_id AND i.deleted_at IS NULL
          GROUP BY t.id ORDER BY t.name COLLATE NOCASE",
     )?;
     let v = st
@@ -618,12 +690,13 @@ pub fn list_tags(c: &Connection) -> R<Vec<TagCount>> {
 pub fn counts(c: &Connection, end_of_today: i64) -> R<Counts> {
     c.query_row(
         "SELECT
-           SUM(kind='task' AND done=0 AND COALESCE(due_at, remind_at) <= ?1),
-           SUM(kind='task' AND done=0 AND COALESCE(due_at, remind_at) > ?1),
-           SUM(kind='task' AND done=0),
-           SUM(kind='note' AND done=0),
-           SUM(done=1)
-         FROM items",
+           SUM(d IS NULL AND kind='task' AND done=0 AND COALESCE(due_at, remind_at) <= ?1),
+           SUM(d IS NULL AND kind='task' AND done=0 AND COALESCE(due_at, remind_at) > ?1),
+           SUM(d IS NULL AND kind='task' AND done=0),
+           SUM(d IS NULL AND kind='note' AND done=0),
+           SUM(d IS NULL AND done=1),
+           SUM(d IS NOT NULL)
+         FROM (SELECT *, deleted_at AS d FROM items)",
         [end_of_today],
         |r| {
             Ok(Counts {
@@ -632,6 +705,7 @@ pub fn counts(c: &Connection, end_of_today: i64) -> R<Counts> {
                 tasks: r.get::<_, Option<i64>>(2)?.unwrap_or(0),
                 notes: r.get::<_, Option<i64>>(3)?.unwrap_or(0),
                 done: r.get::<_, Option<i64>>(4)?.unwrap_or(0),
+                trash: r.get::<_, Option<i64>>(5)?.unwrap_or(0),
             })
         },
     )
@@ -640,7 +714,7 @@ pub fn counts(c: &Connection, end_of_today: i64) -> R<Counts> {
 // ---------- exportar / importar ----------
 
 pub fn export_all(c: &Connection) -> R<ExportData> {
-    let sql = format!("SELECT {ITEM_COLS} FROM items ORDER BY id");
+    let sql = format!("SELECT {ITEM_COLS} FROM items WHERE {ALIVE} ORDER BY id");
     let mut st = c.prepare(&sql)?;
     let mut items = st.query_map([], map_item)?.collect::<R<Vec<Item>>>()?;
     let tags = all_tags_map(c)?;
@@ -750,9 +824,85 @@ mod tests {
         let done = toggle_done(&c, it.id, 2000).unwrap();
         assert!(done.done);
         assert_eq!(query_items(&c, &f("done"), 0).unwrap().len(), 1);
-        assert_eq!(clear_done(&c).unwrap(), 1);
-        assert!(get_item(&c, it.id).unwrap().is_none());
-        assert!(list_tags(&c).unwrap().iter().all(|t| t.name == "Trabajo")); // la nota conserva su etiqueta
+        // «Vaciar completadas» mueve a la papelera
+        assert_eq!(clear_done(&c, 3000).unwrap(), 1);
+        assert!(query_items(&c, &f("done"), 0).unwrap().is_empty());
+        assert_eq!(query_items(&c, &f("trash"), 0).unwrap().len(), 1);
+    }
+
+    fn f(view: &str) -> Filter {
+        Filter {
+            view: view.into(),
+            list_id: None,
+            tag: None,
+            search: None,
+        }
+    }
+
+    #[test]
+    fn trash_hides_restores_and_purges() {
+        let c = open_in_memory().unwrap();
+        let day = DAY_MS;
+        let a = save_item(&c, &task("A", Some(5_000), "none"), 1000).unwrap();
+        let b = save_item(&c, &task("B", None, "none"), 1000).unwrap();
+
+        delete_item(&c, a.id, 2_000).unwrap();
+        // oculto en vistas, búsqueda, contadores, etiquetas y avisos
+        assert_eq!(query_items(&c, &f("tasks"), 0).unwrap().len(), 1);
+        let mut s = f("tasks");
+        s.search = Some("A".into());
+        assert!(query_items(&c, &s, 0).unwrap().iter().all(|i| i.id != a.id));
+        let ct = counts(&c, i64::MAX).unwrap();
+        assert_eq!((ct.tasks, ct.trash), (1, 1));
+        assert!(fire_due(&c, 10_000).unwrap().is_empty());
+        let trash = query_items(&c, &f("trash"), 0).unwrap();
+        assert_eq!(trash.len(), 1);
+        assert_eq!(trash[0].deleted_at, Some(2_000));
+
+        // restaurar
+        restore_item(&c, a.id).unwrap();
+        assert_eq!(query_items(&c, &f("tasks"), 0).unwrap().len(), 2);
+        assert_eq!(counts(&c, 0).unwrap().trash, 0);
+
+        // purga: solo lo que lleva más de 10 días
+        delete_item(&c, a.id, 1_000_000).unwrap();
+        delete_item(&c, b.id, 1_000_000 + 5 * day).unwrap();
+        assert_eq!(
+            purge_trash(&c, 1_000_000 + TRASH_DAYS * day - 1).unwrap(),
+            0
+        );
+        assert_eq!(purge_trash(&c, 1_000_000 + TRASH_DAYS * day).unwrap(), 1);
+        assert!(get_item(&c, a.id).unwrap().is_none());
+        assert!(get_item(&c, b.id).unwrap().is_some());
+
+        // vaciar y eliminar para siempre
+        assert_eq!(empty_trash(&c).unwrap(), 1);
+        assert!(get_item(&c, b.id).unwrap().is_none());
+        assert!(list_tags(&c).unwrap().is_empty());
+        let x = save_item(&c, &task("X", None, "none"), 1).unwrap();
+        delete_forever(&c, x.id).unwrap();
+        assert!(get_item(&c, x.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn migration_v1_to_v2_keeps_data() {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch(SCHEMA_V1).unwrap();
+        c.pragma_update(None, "user_version", 1).unwrap();
+        c.execute(
+            "INSERT INTO items(kind, title, created_at, updated_at) VALUES('task', 'Vieja', 1, 1)",
+            [],
+        )
+        .unwrap();
+        init(&c).unwrap();
+        let v: i64 = c
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 2);
+        let items = query_items(&c, &f("tasks"), 0).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Vieja");
+        assert_eq!(items[0].deleted_at, None);
     }
 
     #[test]

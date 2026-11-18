@@ -45,9 +45,13 @@
   onkeydown={() => {}}
   in:fly={{ y: -6, duration: 160 }}
 >
-  <button class="check" class:checked={item.done || leaving} title={item.done ? "Marcar como pendiente" : "Completar"} onclick={check}>
-    {#if item.done || leaving}<Icon name="done" size={12} />{/if}
-  </button>
+  {#if item.kind === "note"}
+    <span class="note-icon"><Icon name="note" size={17} /></span>
+  {:else}
+    <button class="check" class:checked={item.done || leaving} title={item.done ? "Marcar como pendiente" : "Completar"} onclick={check}>
+      {#if item.done || leaving}<Icon name="done" size={12} />{/if}
+    </button>
+  {/if}
 
   <div class="main">
     <div class="title">{item.title || "Sin título"}</div>
@@ -75,13 +79,13 @@
         <Icon name={item.pinned ? "pinned" : "pin"} size={15} />
       </button>
       <QuickReminder value={item.remindAt} onchange={(v) => actions.setReminder(item, v)} />
-      <button class="icon-btn act" title="Eliminar (Supr)" onclick={(e) => { e.stopPropagation(); actions.remove(item); }}>
+      <button class="icon-btn act" title="Mover a la papelera (Supr)" onclick={(e) => { e.stopPropagation(); actions.remove(item); }}>
         <Icon name="trash" size={15} />
       </button>
     </div>
   {:else}
     <div class="actions">
-      <button class="icon-btn act" title="Eliminar" onclick={(e) => { e.stopPropagation(); actions.remove(item); }}><Icon name="trash" size={15} /></button>
+      <button class="icon-btn act" title="Mover a la papelera" onclick={(e) => { e.stopPropagation(); actions.remove(item); }}><Icon name="trash" size={15} /></button>
     </div>
   {/if}
   {#if item.pinned}<span class="pin"><Icon name="pinned" size={13} /></span>{/if}
@@ -102,6 +106,7 @@
   }
   .check:hover { border-color: var(--accent); background: var(--accent-soft); }
   .check.checked { background: var(--accent); border-color: var(--accent); animation: pop 0.25s ease-out; }
+  .note-icon { flex: none; display: grid; place-items: center; width: 20px; color: var(--accent); }
   .main { flex: 1; min-width: 0; }
   .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .done .title { text-decoration: line-through; color: var(--text-3); }

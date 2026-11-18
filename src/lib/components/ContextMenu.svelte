@@ -65,7 +65,7 @@
       <Icon name={item.kind === "task" ? "note" : "done"} size={14} />Convertir en {item.kind === "task" ? "nota" : "tarea"}
     </button>
     <div class="sep"></div>
-    <button class="mi danger" onclick={() => act("remove")}><Icon name="trash" size={14} />Eliminar<span class="grow"></span><kbd>Supr</kbd></button>
+    <button class="mi danger" onclick={() => act("remove")}><Icon name="trash" size={14} />Mover a la papelera<span class="grow"></span><kbd>Supr</kbd></button>
   {/if}
 </div>
 

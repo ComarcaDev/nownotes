@@ -64,11 +64,42 @@ pub fn save_item(app: AppHandle, state: State<AppState>, input: ItemInput) -> Re
 pub fn delete_item(app: AppHandle, state: State<AppState>, id: i64) -> Res<()> {
     {
         let c = state.db.lock().unwrap();
-        db::delete_item(&c, id).map_err(e)?;
+        db::delete_item(&c, id, db::now_ms()).map_err(e)?;
     }
     state.alerts.lock().unwrap().retain(|a| *a != id);
     changed(&app);
     Ok(())
+}
+
+#[tauri::command]
+pub fn restore_item(app: AppHandle, state: State<AppState>, id: i64) -> Res<()> {
+    {
+        let c = state.db.lock().unwrap();
+        db::restore_item(&c, id).map_err(e)?;
+    }
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_forever(app: AppHandle, state: State<AppState>, id: i64) -> Res<()> {
+    {
+        let c = state.db.lock().unwrap();
+        db::delete_forever(&c, id).map_err(e)?;
+    }
+    state.alerts.lock().unwrap().retain(|a| *a != id);
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn empty_trash(app: AppHandle, state: State<AppState>) -> Res<usize> {
+    let n = {
+        let c = state.db.lock().unwrap();
+        db::empty_trash(&c).map_err(e)?
+    };
+    changed(&app);
+    Ok(n)
 }
 
 #[tauri::command]
@@ -85,7 +116,7 @@ pub fn toggle_done(app: AppHandle, state: State<AppState>, id: i64) -> Res<Item>
 pub fn clear_done(app: AppHandle, state: State<AppState>) -> Res<usize> {
     let n = {
         let c = state.db.lock().unwrap();
-        db::clear_done(&c).map_err(e)?
+        db::clear_done(&c, db::now_ms()).map_err(e)?
     };
     changed(&app);
     Ok(n)
@@ -221,6 +252,12 @@ pub fn set_setting(app: AppHandle, state: State<AppState>, key: String, value: S
                 let _ = w.set_theme(theme);
             }
         }
+        "always_on_top" => {
+            if let Some(w) = app.get_webview_window("main") {
+                w.set_always_on_top(value == "1").map_err(e)?;
+            }
+        }
+        "ui_mode" => return Err("Usa set_ui_mode para cambiar de modo".into()),
         _ => {}
     }
     {
@@ -278,4 +315,13 @@ pub async fn open_quick(app: AppHandle) {
 #[tauri::command]
 pub fn startup_minimized(state: State<AppState>) -> bool {
     state.start_minimized
+}
+
+/// Cambia entre el modo completo y el mínimo, recordando el tamaño de cada uno.
+#[tauri::command]
+pub async fn set_ui_mode(app: AppHandle, mode: String) -> Res<()> {
+    let mode = if mode == "mini" { "mini" } else { "full" };
+    windows::apply_mode(&app, mode).map_err(e)?;
+    let _ = app.emit("settings-changed", ("ui_mode", mode));
+    Ok(())
 }

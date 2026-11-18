@@ -9,8 +9,9 @@
   let {
     filter,
     oncreated,
+    compact = false,
     input = $bindable(),
-  }: { filter: Filter; oncreated: (it: Item) => void; input?: HTMLInputElement } = $props();
+  }: { filter: Filter; oncreated: (it: Item) => void; compact?: boolean; input?: HTMLInputElement } = $props();
 
   const fixedKind = $derived<Kind | null>(
     filter.view === "notes" ? "note" : filter.view === "list" || filter.view === "tag" ? null : "task"
@@ -45,6 +46,7 @@
   const canSubmit = $derived(text.trim() !== "");
 
   const placeholder = $derived.by(() => {
+    if (compact) return kind === "note" ? "Nueva nota…" : "Nueva tarea…";
     if (kind === "note") return "Escribe una nota nueva…";
     if (filter.view === "today") return "Añadir una tarea para hoy…";
     if (filter.view === "upcoming") return "Añadir una tarea para mañana…";
@@ -84,7 +86,7 @@
   const tomorrow = () => at(1, 0);
 </script>
 
-<div class="composer" class:expanded role="group" onfocusin={() => (focused = true)} onfocusout={onFocusOut}>
+<div class="composer" class:expanded class:compact role="group" onfocusin={() => (focused = true)} onfocusout={onFocusOut}>
   <div class="line">
     <button class="plus" class:note={kind === "note"} title="Crear" onclick={() => (canSubmit ? create() : input?.focus())}>
       <Icon name={kind === "note" ? "note" : "plus"} size={15} />
@@ -106,7 +108,7 @@
       </div>
     {/if}
     <button class="add" class:ready={canSubmit} disabled={!canSubmit} onclick={create} title="Añadir (Enter)">
-      Añadir <kbd>↵</kbd>
+      {#if !compact}Añadir {/if}<kbd>↵</kbd>
     </button>
   </div>
 
@@ -167,6 +169,10 @@
   .extras {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 12px 10px 42px; color: var(--text-2);
   }
+  .compact { margin: 0 12px 10px; }
+  .compact .add { padding: 5px 6px; }
+  .compact .extras { padding-left: 12px; }
+  .compact .kind button { padding: 2px 7px; }
   .sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; }
   .date { position: relative; display: inline-flex; }
   .date input { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; padding: 0; border: 0; }

@@ -11,7 +11,7 @@ Ligera (unos 2 MB), moderna y sin cuentas: todo se guarda en tu equipo.
 [![Release](https://img.shields.io/github/v/release/hujeanpaes/apunta)](https://github.com/hujeanpaes/apunta/releases/latest)
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
 
-<img src="docs/screenshot.png" width="820" alt="Captura de Apunta" />
+<img src="docs/screenshot.png" width="640" alt="Apunta en modo completo" />&nbsp;&nbsp;<img src="docs/screenshot-mini.png" width="235" alt="Apunta en modo mínimo" />
 
 </div>
 
@@ -21,7 +21,10 @@ Ligera (unos 2 MB), moderna y sin cuentas: todo se guarda en tu equipo.
 - **Captura rápida desde cualquier sitio** con `Ctrl+Alt+N` (configurable).
 - **Recordatorios** con notificación de Windows, ventana de aviso y sonido. Pueden repetirse (cada día, días laborables, semana, mes o año) y posponerse 5 min, 1 h o hasta mañana.
 - **Organización** con listas de colores, etiquetas, búsqueda y elementos fijados.
-- **Diseño Windows 11** con efecto Mica y tema claro u oscuro.
+- **Papelera** que guarda lo eliminado 10 días por si necesitas recuperarlo.
+- **Modo mínimo**: una ventana compacta tipo widget con Hoy, Tareas y Notas.
+- **Anclar la ventana** encima de todas las demás, en cualquiera de los dos modos.
+- **Diseño Windows 11** con efecto Mica. Tema oscuro por defecto y claro con un clic en el sol o la luna.
 - **Bandeja del sistema e inicio con Windows**, para que los avisos lleguen aunque cierres la ventana.
 - **Instalable o portable.** La versión portable guarda los datos junto al ejecutable.
 - **Exportar e importar** los datos en JSON.
@@ -46,7 +49,10 @@ Requisitos: Windows 11 de 64 bits. No está probada en Windows 10.
 | `Ctrl+F` | Buscar |
 | `Espacio` | Completar la tarea seleccionada |
 | `Enter` | Editar el título del elemento seleccionado |
-| `Supr` | Eliminar (con opción de deshacer) |
+| `Supr` | Mover a la papelera (con opción de deshacer) |
+| `Ctrl+M` | Alternar modo mínimo y modo completo |
+| `Ctrl+P` | Anclar o desanclar la ventana encima de las demás |
+| `Ctrl+Mayús+L` | Cambiar entre tema oscuro y claro |
 | `↑` / `↓` | Moverse entre elementos |
 | `Esc` | Cerrar el editor o la búsqueda |
 

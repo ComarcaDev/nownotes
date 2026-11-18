@@ -11,6 +11,13 @@
     tasks: "M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM8.5 12l2.5 2.5 4.5-5",
     checkall: "M2 12.5l4.5 4.5L16 7.5M11 16l1 1 9.5-9.5",
     more: "M5 12h.01M12 12h.01M19 12h.01",
+    moon: "M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z",
+    minimize: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6ZM12 12h5v5h-5z",
+    expand: "M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7",
+    back: "M15 5l-7 7 7 7",
+    restore: "M4 12a8 8 0 1 0 2.5-5.8M4 4v4h4",
+    anchor: "M12 17v5M8 3h8l-1 7 3 3v2H6v-2l3-3-1-7Z",
+    anchored: "M12 17v5M8 3h8l-1 7 3 3v2H6v-2l3-3-1-7Z",
     list: "M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z",
     tag: "M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9ZM7.5 7.5h.01",
     bell: "M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9ZM10 20a2 2 0 0 0 4 0",
@@ -40,5 +47,5 @@
   stroke-linejoin="round"
   aria-hidden="true"
 >
-  <path d={PATHS[name] ?? ""} fill={name === "pinned" ? "currentColor" : "none"} />
+  <path d={PATHS[name] ?? ""} fill={name === "pinned" || name === "anchored" ? "currentColor" : "none"} />
 </svg>

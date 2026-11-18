@@ -52,7 +52,7 @@
       <Icon name={item.pinned ? "pinned" : "pin"} size={14} />
     </button>
     <QuickReminder value={item.remindAt} onchange={(v) => actions.setReminder(item, v)} />
-    <button class="icon-btn act" title="Eliminar" onclick={(e) => { e.stopPropagation(); actions.remove(item); }}><Icon name="trash" size={14} /></button>
+    <button class="icon-btn act" title="Mover a la papelera" onclick={(e) => { e.stopPropagation(); actions.remove(item); }}><Icon name="trash" size={14} /></button>
   </div>
 </div>
 

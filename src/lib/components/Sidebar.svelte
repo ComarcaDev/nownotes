@@ -182,6 +182,15 @@
         <span class="keys">{#each shortcut.split("+") as k, i (i)}<kbd>{k}</kbd>{/each}</span>
       </button>
     {/if}
+    <button
+      class="nav"
+      class:active={filter.view === "trash" && !search}
+      title={compact ? "Papelera" : undefined}
+      onclick={() => onselect({ view: "trash" })}
+    >
+      <Icon name="trash" />{#if !compact}<span class="label">Papelera</span>{/if}
+      {#if counts.trash > 0}<span class="count" class:badge={compact}>{counts.trash}</span>{/if}
+    </button>
     <button class="nav" title={compact ? "Ajustes" : undefined} onclick={onsettings}>
       <Icon name="settings" />{#if !compact}<span class="label">Ajustes</span>{/if}
     </button>

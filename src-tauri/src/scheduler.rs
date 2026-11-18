@@ -11,11 +11,28 @@ pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
         // Pequeña espera para que la ventana principal termine de cargar.
         std::thread::sleep(Duration::from_secs(2));
+        // Vuelta 0, y luego una vez por hora (240 × 15 s), se vacía lo caducado de la papelera.
+        let mut ticks: u32 = 0;
         loop {
+            if ticks.is_multiple_of(240) {
+                purge(&app);
+            }
             tick(&app);
+            ticks = ticks.wrapping_add(1);
             std::thread::sleep(Duration::from_secs(15));
         }
     });
+}
+
+fn purge(app: &AppHandle) {
+    let n = {
+        let state = app.state::<AppState>();
+        let c = state.db.lock().unwrap();
+        db::purge_trash(&c, db::now_ms()).unwrap_or(0)
+    };
+    if n > 0 {
+        let _ = app.emit("items-changed", ());
+    }
 }
 
 pub fn tick(app: &AppHandle) {

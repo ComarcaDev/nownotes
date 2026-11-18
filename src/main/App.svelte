@@ -13,6 +13,9 @@
   import ContextMenu from "../lib/components/ContextMenu.svelte";
   import Toast from "../lib/components/Toast.svelte";
   import Icon from "../lib/components/Icon.svelte";
+  import WindowToolbar from "../lib/components/WindowToolbar.svelte";
+  import TrashList from "../lib/components/TrashList.svelte";
+  import { win, initWindowState, toggleTheme, toggleMode, toggleOnTop } from "../lib/window.svelte";
 
   let filter = $state<Filter>({ view: "today" });
   let searchText = $state("");
@@ -20,7 +23,7 @@
   let items = $state<Item[]>([]);
   let lists = $state<List[]>([]);
   let tags = $state<TagCount[]>([]);
-  let counts = $state<Counts>({ today: 0, upcoming: 0, tasks: 0, notes: 0, done: 0 });
+  let counts = $state<Counts>({ today: 0, upcoming: 0, tasks: 0, notes: 0, done: 0, trash: 0 });
   let selectedId = $state<number | null>(null);
   let selectedItem = $state<Item | null>(null);
   let showSettings = $state(false);
@@ -31,10 +34,28 @@
   let newEl = $state<HTMLInputElement>();
   let editor = $state<ReturnType<typeof Editor>>();
 
+  const mini = $derived(win.mode === "mini");
   const compact = $derived(selectedItem ? width < 1100 : width < 860);
   const searching = $derived(search.trim() !== "");
 
-  const TITLES: Record<string, string> = { today: "Hoy", upcoming: "Próximas", tasks: "Tareas", notes: "Notas", done: "Completadas" };
+  // Pestañas del modo mínimo.
+  const MINI_TABS = [
+    { view: "today", label: "Hoy", icon: "sun" },
+    { view: "tasks", label: "Tareas", icon: "tasks" },
+    { view: "notes", label: "Notas", icon: "note" },
+  ] as const;
+
+  // Al entrar en modo mínimo, solo se admiten las vistas de sus pestañas.
+  $effect(() => {
+    if (mini && !MINI_TABS.some((t) => t.view === filter.view)) {
+      filter = { view: "today" };
+      searchText = "";
+    }
+  });
+
+  const TITLES: Record<string, string> = {
+    today: "Hoy", upcoming: "Próximas", tasks: "Tareas", notes: "Notas", done: "Completadas", trash: "Papelera",
+  };
   const title = $derived.by(() => {
     if (searching) return `Resultados para «${search.trim()}»`;
     if (filter.view === "list") return lists.find((l) => l.id === filter.listId)?.name ?? "Lista";
@@ -123,12 +144,9 @@
     async remove(it) {
       await api.deleteItem(it.id);
       if (selectedId === it.id) closeEditor();
-      showToast(`${name(it)} eliminada`, {
+      showToast(`${name(it)} movida a la papelera`, {
         label: "Deshacer",
-        run: async () => {
-          const restored = await api.saveItem(toInput(it, { id: null }));
-          if (it.done) await api.toggleDone(restored.id);
-        },
+        run: () => api.restoreItem(it.id),
       });
     },
     async pin(it) {
@@ -171,6 +189,9 @@
   function onKey(e: KeyboardEvent) {
     if (showSettings || menu) return;
     const k = e.key.toLowerCase();
+    if (e.ctrlKey && e.shiftKey && k === "l") { e.preventDefault(); toggleTheme(); return; }
+    if (e.ctrlKey && !e.shiftKey && k === "m") { e.preventDefault(); toggleMode(); return; }
+    if (e.ctrlKey && !e.shiftKey && k === "p") { e.preventDefault(); toggleOnTop(); return; }
     if (e.ctrlKey && k === "n") { e.preventDefault(); newEl?.focus(); return; }
     if (e.ctrlKey && k === "f") { e.preventDefault(); searchEl?.focus(); searchEl?.select(); return; }
     if (e.key === "Escape") {
@@ -198,6 +219,7 @@
       if (e.payload[0] === "shortcut") shortcut = e.payload[1];
     });
     api.settings().then((s) => (shortcut = s.shortcut));
+    initWindowState();
     // Se muestra la ventana cuando ya está pintada (sin parpadeo blanco).
     (async () => {
       await reload();
@@ -215,6 +237,48 @@
 
 <svelte:window onkeydown={onKey} bind:innerWidth={width} />
 
+{#if mini}
+  <div class="mini">
+    <header class="mini-head">
+      <div class="tabs" role="tablist">
+        {#each MINI_TABS as t (t.view)}
+          {@const n = counts[t.view]}
+          <button
+            role="tab"
+            class="tab"
+            class:active={filter.view === t.view}
+            aria-selected={filter.view === t.view}
+            title={t.label}
+            onclick={() => { filter = { view: t.view }; closeEditor(); }}
+          >
+            <Icon name={t.icon} size={15} />
+            <span>{t.label}</span>
+            {#if n > 0}<span class="n">{n}</span>{/if}
+          </button>
+        {/each}
+      </div>
+      <WindowToolbar />
+    </header>
+    {#if selectedItem}
+      {#key selectedItem.id}
+        <Editor bind:this={editor} item={selectedItem} {lists} onclose={closeEditor} onremove={actions.remove} compact />
+      {/key}
+    {:else}
+      <ItemList
+        {items}
+        {filter}
+        {lists}
+        {selectedId}
+        searching={false}
+        {shortcut}
+        {actions}
+        compact
+        oncreated={(it) => { if (it.kind === "note") select(it); }}
+        bind:newInput={newEl}
+      />
+    {/if}
+  </div>
+{:else}
 <div class="app" style:grid-template-columns="{compact ? 56 : 248}px 1fr {selectedItem ? '380px' : ''}">
   <Sidebar
     {lists}
@@ -235,13 +299,19 @@
         <h1>{title}</h1>
         {#if subtitle}<div class="faint subtitle">{subtitle}</div>{/if}
       </div>
-      {#if compact}
-        <div class="search">
-          <Icon name="search" size={14} />
-          <input type="search" placeholder="Buscar" bind:value={searchText} bind:this={searchEl} />
-        </div>
-      {/if}
+      <div class="head-right">
+        {#if compact}
+          <div class="search">
+            <Icon name="search" size={14} />
+            <input type="search" placeholder="Buscar" bind:value={searchText} bind:this={searchEl} />
+          </div>
+        {/if}
+        <WindowToolbar />
+      </div>
     </header>
+    {#if filter.view === "trash" && !searching}
+      <TrashList {items} />
+    {:else}
     <ItemList
       {items}
       {filter}
@@ -253,6 +323,7 @@
       oncreated={(it) => { if (it.kind === "note") select(it); }}
       bind:newInput={newEl}
     />
+    {/if}
   </main>
 
   {#if selectedItem}
@@ -261,6 +332,7 @@
     {/key}
   {/if}
 </div>
+{/if}
 
 {#if menu}
   <ContextMenu x={menu.x} y={menu.y} item={menu.item} {lists} onaction={onMenu} onclose={() => (menu = null)} />
@@ -283,6 +355,22 @@
   h1 { margin: 0; font-family: var(--font-display); font-size: 26px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .subtitle { margin-top: 2px; }
   .subtitle::first-letter { text-transform: uppercase; }
+  .head-right { display: flex; align-items: center; gap: 10px; flex: none; }
+
+  /* ---------- modo mínimo ---------- */
+  .mini { display: flex; flex-direction: column; height: 100%; background: var(--layer); }
+  .mini-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 10px 10px; }
+  .tabs { display: flex; gap: 2px; flex: 1; min-width: 0; background: var(--hover); border-radius: 8px; padding: 3px; }
+  .tab {
+    flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: none; background: transparent; color: var(--text-2); border-radius: 6px; padding: 5px 6px;
+    font-size: 12.5px; cursor: default; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); }
+  .tab .n { font-size: 11px; color: var(--accent); font-weight: 600; }
+  @media (max-width: 360px) { .tab span:not(.n) { display: none; } }
+
   .search {
     display: flex; align-items: center; gap: 6px; padding: 0 8px; width: 200px; flex: none;
     background: var(--control); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-2);

@@ -46,7 +46,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 let st = app.state::<AppState>();
                 *st.paused_until.lock().unwrap() = db::now_ms() + 3_600_000;
             }
-            "quit" => app.exit(0),
+            "quit" => {
+                windows::save_size(app);
+                app.exit(0)
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -122,6 +125,7 @@ fn main() {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 match window.label() {
                     "main" => {
+                        windows::save_size(window.app_handle());
                         let to_tray = {
                             let st = window.state::<AppState>();
                             let c = st.db.lock().unwrap();
@@ -166,6 +170,10 @@ fn main() {
             commands::open_quick,
             commands::startup_minimized,
             commands::clear_done,
+            commands::restore_item,
+            commands::delete_forever,
+            commands::empty_trash,
+            commands::set_ui_mode,
         ])
         .build(tauri::generate_context!())
         .expect("Error al iniciar Apunta");

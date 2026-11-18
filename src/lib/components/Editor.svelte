@@ -12,7 +12,8 @@
     lists,
     onclose,
     onremove,
-  }: { item: Item; lists: List[]; onclose: () => void; onremove: (it: Item) => void } = $props();
+    compact = false,
+  }: { item: Item; lists: List[]; onclose: () => void; onremove: (it: Item) => void; compact?: boolean } = $props();
 
   let titleEl = $state<HTMLTextAreaElement>();
   let menuOpen = $state(false);
@@ -119,8 +120,11 @@
 
 <svelte:window onmousedown={() => (menuOpen = false)} />
 
-<section class="editor">
+<section class="editor" class:compact>
   <header>
+    {#if compact}
+      <button class="icon-btn" title="Volver (Esc)" onclick={onclose}><Icon name="back" /></button>
+    {/if}
     <span class="kind-badge" class:note={d.kind === "note"}>
       <Icon name={d.kind === "note" ? "note" : "tasks"} size={13} />{d.kind === "note" ? "Nota" : "Tarea"}
     </span>
@@ -136,11 +140,13 @@
           <button class="mi" onclick={convert}>
             <Icon name={d.kind === "task" ? "note" : "tasks"} size={14} />Convertir en {d.kind === "task" ? "nota" : "tarea"}
           </button>
-          <button class="mi danger" onclick={remove}><Icon name="trash" size={14} />Eliminar</button>
+          <button class="mi danger" onclick={remove}><Icon name="trash" size={14} />Mover a la papelera</button>
         </div>
       {/if}
     </div>
-    <button class="icon-btn" title="Cerrar (Esc)" onclick={onclose}><Icon name="x" /></button>
+    {#if !compact}
+      <button class="icon-btn" title="Cerrar (Esc)" onclick={onclose}><Icon name="x" /></button>
+    {/if}
   </header>
 
   <div class="body">
@@ -224,6 +230,11 @@
   .editor { display: flex; flex-direction: column; min-height: 0; background: var(--layer); border-left: 1px solid var(--border); }
   header { display: flex; align-items: center; gap: 2px; padding: 10px 12px; }
   .spacer { flex: 1; }
+  .editor.compact { border-left: none; background: transparent; flex: 1; }
+  .compact header { padding: 6px 8px; }
+  .compact .body { padding: 2px 14px 14px; }
+  .compact .field { grid-template-columns: 82px 1fr; }
+  .compact footer { padding: 6px 14px 10px; }
   .kind-badge {
     display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 999px;
     font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent);
@@ -240,6 +251,8 @@
   .mi:hover { background: var(--hover); }
   .mi.danger { color: var(--danger); }
   .body { flex: 1; overflow-y: auto; padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
+  /* Con poca altura (modo mínimo) los campos no deben encogerse: la zona hace scroll. */
+  .body > * { flex-shrink: 0; }
   .title {
     font-family: var(--font-display); font-size: 20px; font-weight: 600; border: none; background: transparent;
     padding: 4px 0; overflow: hidden;
