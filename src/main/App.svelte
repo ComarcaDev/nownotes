@@ -1,0 +1,293 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { api, type Counts, type Filter, type Item, type ItemInput, type List, type TagCount } from "../lib/api";
+  import type { ItemActions, MenuAction } from "../lib/actions";
+  import { showToast } from "../lib/toast.svelte";
+  import { fmt } from "../lib/dates";
+  import Sidebar from "../lib/components/Sidebar.svelte";
+  import ItemList from "../lib/components/ItemList.svelte";
+  import Editor from "../lib/components/Editor.svelte";
+  import SettingsDialog from "../lib/components/Settings.svelte";
+  import ContextMenu from "../lib/components/ContextMenu.svelte";
+  import Toast from "../lib/components/Toast.svelte";
+  import Icon from "../lib/components/Icon.svelte";
+
+  let filter = $state<Filter>({ view: "today" });
+  let searchText = $state("");
+  let search = $state("");
+  let items = $state<Item[]>([]);
+  let lists = $state<List[]>([]);
+  let tags = $state<TagCount[]>([]);
+  let counts = $state<Counts>({ today: 0, upcoming: 0, tasks: 0, notes: 0, done: 0 });
+  let selectedId = $state<number | null>(null);
+  let selectedItem = $state<Item | null>(null);
+  let showSettings = $state(false);
+  let shortcut = $state("");
+  let menu = $state<{ x: number; y: number; item: Item } | null>(null);
+  let width = $state(1040);
+  let searchEl = $state<HTMLInputElement>();
+  let newEl = $state<HTMLInputElement>();
+  let editor = $state<ReturnType<typeof Editor>>();
+
+  const compact = $derived(selectedItem ? width < 1100 : width < 860);
+  const searching = $derived(search.trim() !== "");
+
+  const TITLES: Record<string, string> = { today: "Hoy", upcoming: "Próximas", tasks: "Tareas", notes: "Notas", done: "Completadas" };
+  const title = $derived.by(() => {
+    if (searching) return `Resultados para «${search.trim()}»`;
+    if (filter.view === "list") return lists.find((l) => l.id === filter.listId)?.name ?? "Lista";
+    if (filter.view === "tag") return `#${filter.tag}`;
+    return TITLES[filter.view];
+  });
+  const subtitle = $derived.by(() => {
+    if (searching) return "";
+    if (filter.view === "today") return new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+    if (filter.view === "tasks") return "Cosas por hacer";
+    if (filter.view === "notes") return "Ideas y textos para guardar";
+    return "";
+  });
+
+  // ---------- carga de datos ----------
+  let seq = 0;
+  async function reload() {
+    const my = ++seq;
+    const f: Filter = { ...$state.snapshot(filter), search: search.trim() || null };
+    const [it, ls, tg, ct] = await Promise.all([api.queryItems(f), api.lists(), api.tags(), api.counts()]);
+    if (my !== seq) return;
+    items = it;
+    lists = ls;
+    tags = tg;
+    counts = ct;
+    if (selectedId != null) {
+      const found = it.find((i) => i.id === selectedId) ?? (await api.getItem(selectedId));
+      if (found) selectedItem = found;
+      else closeEditor();
+    }
+  }
+
+  // Varios cambios seguidos → una sola recarga.
+  let pending = false;
+  function scheduleReload() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; reload(); });
+  }
+
+  $effect(() => {
+    void filter.view; void filter.listId; void filter.tag; void search;
+    reload();
+  });
+
+  // Búsqueda con espera de 150 ms.
+  $effect(() => {
+    const s = searchText;
+    if (!s.trim()) { search = ""; return; }
+    const t = setTimeout(() => (search = s), 150);
+    return () => clearTimeout(t);
+  });
+
+  // ---------- selección ----------
+  function select(it: Item) {
+    selectedId = it.id;
+    selectedItem = it;
+  }
+  function closeEditor() {
+    selectedId = null;
+    selectedItem = null;
+  }
+
+  // ---------- acciones ----------
+  const toInput = (it: Item, patch: Partial<ItemInput> = {}): ItemInput => ({
+    id: it.id, kind: it.kind, title: it.title, body: it.body, listId: it.listId, dueAt: it.dueAt,
+    remindAt: it.remindAt, recur: it.recur, pinned: it.pinned, tags: it.tags, ...patch,
+  });
+  const name = (it: Item) => `«${(it.title || "Sin título").slice(0, 40)}»`;
+
+  const actions: ItemActions = {
+    select,
+    async toggle(it) {
+      const updated = await api.toggleDone(it.id);
+      if (it.done) return;
+      if (it.recur !== "none" && !updated.done) {
+        const next = updated.dueAt ?? updated.remindAt;
+        showToast(next ? `Hecha. Siguiente: ${fmt(next, updated.remindAt != null)}` : "Hecha", {
+          label: "Deshacer",
+          run: () => api.saveItem(toInput(it)),
+        });
+      } else {
+        showToast(`${name(it)} completada`, { label: "Deshacer", run: () => api.toggleDone(it.id) });
+      }
+    },
+    async remove(it) {
+      await api.deleteItem(it.id);
+      if (selectedId === it.id) closeEditor();
+      showToast(`${name(it)} eliminada`, {
+        label: "Deshacer",
+        run: async () => {
+          const restored = await api.saveItem(toInput(it, { id: null }));
+          if (it.done) await api.toggleDone(restored.id);
+        },
+      });
+    },
+    async pin(it) {
+      await api.saveItem(toInput(it, { pinned: !it.pinned }));
+    },
+    async setReminder(it, at) {
+      await api.saveItem(toInput(it, { remindAt: at }));
+      if (at != null) showToast(`Te avisaré ${fmt(at).toLowerCase()}`);
+    },
+    menu(e, it) {
+      e.preventDefault();
+      e.stopPropagation();
+      menu = { x: e.clientX, y: e.clientY, item: it };
+    },
+  };
+
+  async function onMenu(a: MenuAction) {
+    const it = menu?.item;
+    if (!it) return;
+    if (a === "open") select(it);
+    else if (a === "toggle") actions.toggle(it);
+    else if (a === "pin") actions.pin(it);
+    else if (a === "remove") actions.remove(it);
+    else if (a === "convert") {
+      const kind = it.kind === "task" ? "note" : "task";
+      await api.saveItem(toInput(it, { kind, dueAt: kind === "note" ? null : it.dueAt }));
+      showToast(`Convertida en ${kind === "note" ? "nota" : "tarea"}`);
+    } else if (typeof a === "object") {
+      await api.saveItem(toInput(it, { listId: a.move }));
+      showToast(`Movida a «${lists.find((l) => l.id === a.move)?.name}»`);
+    }
+  }
+
+  // ---------- teclado ----------
+  function isTyping(e: KeyboardEvent) {
+    const t = e.target as HTMLElement;
+    return t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable;
+  }
+
+  function onKey(e: KeyboardEvent) {
+    if (showSettings || menu) return;
+    const k = e.key.toLowerCase();
+    if (e.ctrlKey && k === "n") { e.preventDefault(); newEl?.focus(); return; }
+    if (e.ctrlKey && k === "f") { e.preventDefault(); searchEl?.focus(); searchEl?.select(); return; }
+    if (e.key === "Escape") {
+      if (searchText && document.activeElement === searchEl) { searchText = ""; return; }
+      if (isTyping(e)) (e.target as HTMLElement).blur();
+      else closeEditor();
+      return;
+    }
+    if (isTyping(e) || !selectedItem) return;
+    if (e.key === " " && selectedItem.kind === "task") { e.preventDefault(); actions.toggle(selectedItem); }
+    else if (e.key === "Delete") { e.preventDefault(); actions.remove(selectedItem); }
+    else if (e.key === "Enter") { e.preventDefault(); editor?.focusTitle(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const ordered = [...items.filter((i) => i.kind === "task"), ...items.filter((i) => i.kind === "note")];
+      const i = ordered.findIndex((x) => x.id === selectedId);
+      const next = ordered[i + (e.key === "ArrowDown" ? 1 : -1)];
+      if (next) select(next);
+    }
+  }
+
+  onMount(() => {
+    const unItems = listen("items-changed", scheduleReload);
+    const unSettings = listen<[string, string]>("settings-changed", (e) => {
+      if (e.payload[0] === "shortcut") shortcut = e.payload[1];
+    });
+    api.settings().then((s) => (shortcut = s.shortcut));
+    // Se muestra la ventana cuando ya está pintada (sin parpadeo blanco).
+    (async () => {
+      await reload();
+      if (!(await api.startupMinimized())) {
+        requestAnimationFrame(async () => {
+          const win = getCurrentWindow();
+          await win.show();
+          await win.setFocus();
+        });
+      }
+    })();
+    return () => { unItems.then((f) => f()); unSettings.then((f) => f()); };
+  });
+</script>
+
+<svelte:window onkeydown={onKey} bind:innerWidth={width} />
+
+<div class="app" style:grid-template-columns="{compact ? 56 : 248}px 1fr {selectedItem ? '380px' : ''}">
+  <Sidebar
+    {lists}
+    {tags}
+    {counts}
+    {filter}
+    {compact}
+    {shortcut}
+    bind:search={searchText}
+    bind:searchEl
+    onselect={(f) => { filter = f; searchText = ""; closeEditor(); }}
+    onsettings={() => (showSettings = true)}
+  />
+
+  <main class="content">
+    <header>
+      <div class="titles">
+        <h1>{title}</h1>
+        {#if subtitle}<div class="faint subtitle">{subtitle}</div>{/if}
+      </div>
+      {#if compact}
+        <div class="search">
+          <Icon name="search" size={14} />
+          <input type="search" placeholder="Buscar" bind:value={searchText} bind:this={searchEl} />
+        </div>
+      {/if}
+    </header>
+    <ItemList
+      {items}
+      {filter}
+      {lists}
+      {selectedId}
+      {searching}
+      {shortcut}
+      {actions}
+      oncreated={(it) => { if (it.kind === "note") select(it); }}
+      bind:newInput={newEl}
+    />
+  </main>
+
+  {#if selectedItem}
+    {#key selectedItem.id}
+      <Editor bind:this={editor} item={selectedItem} {lists} onclose={closeEditor} onremove={actions.remove} />
+    {/key}
+  {/if}
+</div>
+
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} item={menu.item} {lists} onaction={onMenu} onclose={() => (menu = null)} />
+{/if}
+
+{#if showSettings}
+  <SettingsDialog onclose={() => (showSettings = false)} />
+{/if}
+
+<Toast />
+
+<style>
+  .app { display: grid; height: 100%; }
+  .content {
+    display: flex; flex-direction: column; min-width: 0; min-height: 0;
+    background: var(--layer); border-top-left-radius: 8px; border: 1px solid var(--border); border-right: none; border-bottom: none;
+  }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 22px 24px 16px; }
+  .titles { min-width: 0; }
+  h1 { margin: 0; font-family: var(--font-display); font-size: 26px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .subtitle { margin-top: 2px; }
+  .subtitle::first-letter { text-transform: uppercase; }
+  .search {
+    display: flex; align-items: center; gap: 6px; padding: 0 8px; width: 200px; flex: none;
+    background: var(--control); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-2);
+  }
+  .search input { border: none; background: transparent; flex: 1; padding: 6px 2px; min-width: 0; }
+  .search input:focus { border: none; padding-bottom: 6px; background: transparent; }
+  .search:focus-within { border-bottom: 2px solid var(--accent); }
+</style>

@@ -1,0 +1,22 @@
+# Dependencias y compilación
+node_modules/
+dist/
+release/
+src-tauri/target/
+src-tauri/gen/
+
+# Datos locales de la app (modo portable o pruebas)
+data/
+*.db
+*.db-shm
+*.db-wal
+portable
+
+# Editores y sistema
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log
+Thumbs.db
+Desktop.ini
+.DS_Store
