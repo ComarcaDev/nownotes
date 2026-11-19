@@ -132,11 +132,87 @@ pub fn save_list(
     id: Option<i64>,
     name: String,
     color: String,
+    icon: Option<String>,
 ) -> Res<i64> {
     if name.trim().is_empty() {
         return Err("El nombre de la lista no puede estar vacío".into());
     }
-    mutate(&app, &state, |c| db::save_list(c, id, &name, &color))
+    if !is_hex_color(&color) {
+        return Err(format!("Color no válido: {color}"));
+    }
+    let icon = icon.unwrap_or_default();
+    if icon.len() > 32
+        || !icon
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+    {
+        return Err("Icono no válido".into());
+    }
+    mutate(&app, &state, |c| db::save_list(c, id, &name, &color, &icon))
+}
+
+/// «#0067c0» o «#abc».
+fn is_hex_color(s: &str) -> bool {
+    let hex = s.strip_prefix('#').unwrap_or("");
+    matches!(hex.len(), 3 | 6) && hex.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+// ---------- imagen de fondo ----------
+
+const BACKGROUND_STEM: &str = "background";
+const BACKGROUND_EXTS: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
+const BACKGROUND_MAX_BYTES: u64 = 15 * 1024 * 1024;
+
+fn background_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    BACKGROUND_EXTS
+        .iter()
+        .map(|ext| dir.join(format!("{BACKGROUND_STEM}.{ext}")))
+        .filter(|p| p.is_file())
+        .collect()
+}
+
+/// Ruta de la imagen de fondo guardada, si hay.
+#[tauri::command]
+pub fn background_path(state: State<AppState>) -> Option<String> {
+    background_files(&state.data_dir)
+        .into_iter()
+        .next()
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+/// Copia la imagen elegida a la carpeta de datos (así funciona también en modo portable).
+#[tauri::command]
+pub fn set_background(state: State<AppState>, path: String) -> Res<String> {
+    let src = std::path::Path::new(&path);
+    let ext = src
+        .extension()
+        .and_then(|x| x.to_str())
+        .map(str::to_ascii_lowercase)
+        .filter(|x| BACKGROUND_EXTS.contains(&x.as_str()))
+        .ok_or("Formato no admitido. Usa JPG, PNG o WebP.")?;
+    let size = std::fs::metadata(src).map_err(e)?.len();
+    if size > BACKGROUND_MAX_BYTES {
+        return Err(
+            "La imagen pesa más de 15 MB. Usa una más ligera (recomendado: menos de 5 MB).".into(),
+        );
+    }
+    // Se copia primero a un temporal: si falla, la imagen anterior sigue intacta.
+    let tmp = state.data_dir.join(format!("{BACKGROUND_STEM}.tmp"));
+    std::fs::copy(src, &tmp).map_err(e)?;
+    for old in background_files(&state.data_dir) {
+        let _ = std::fs::remove_file(old);
+    }
+    let dest = state.data_dir.join(format!("{BACKGROUND_STEM}.{ext}"));
+    std::fs::rename(&tmp, &dest).map_err(e)?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn clear_background(state: State<AppState>) -> Res<()> {
+    for f in background_files(&state.data_dir) {
+        std::fs::remove_file(f).map_err(e)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

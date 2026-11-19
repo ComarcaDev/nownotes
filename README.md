@@ -21,12 +21,13 @@ Ligera (unos 2 MB), moderna y sin cuentas: todo se guarda en tu equipo.
 - **Fechas en lenguaje natural.** Escribe «llamar a Ana mañana a las 9» o «pay rent next friday» y la fecha y el aviso se ponen solos, en español e inglés.
 - **Captura rápida desde cualquier sitio** con `Ctrl+Alt+N`, y `Ctrl+Alt+A` para mostrar u ocultar la ventana.
 - **Recordatorios** con notificación de Windows, ventana de aviso y sonido. Pueden repetirse (cada día, días laborables, semana, mes o año) y posponerse 5 min, 1 h o hasta mañana.
-- **Organización** con listas de colores, etiquetas, búsqueda, elementos fijados y orden manual arrastrando.
+- **Organización** con listas, etiquetas, búsqueda, elementos fijados y orden manual arrastrando. Cada lista puede tener su color y un icono según la actividad (trabajo, estudio, cocina, viaje…): clic en su punto o clic derecho sobre ella.
 - **Papelera** que guarda lo eliminado 10 días por si necesitas recuperarlo.
 - **Copias de seguridad automáticas** diarias (se guardan las últimas 7) y restaurables desde Ajustes.
 - **Modo mínimo**: una ventana compacta tipo widget con Hoy, Tareas y Notas, buscador y selector de tarea o nota.
 - **Anclar la ventana** encima de todas las demás, en cualquiera de los dos modos.
 - **Diseño Windows 11** con efecto Mica. Tema oscuro por defecto y claro con un clic en el sol o la luna.
+- **Apariencia personalizable** en Ajustes: color de acento, tono de las superficies y fondo Mica, de color o con **tu propia imagen** (enfoque, atenuado, desenfoque y opacidad de los paneles). Para la imagen se recomienda 1920 × 1080 o mayor (16:9), JPG o WebP de menos de 5 MB.
 - **Atajos configurables**, con aviso si chocan con Windows u otra aplicación.
 - **Bandeja del sistema e inicio con Windows**, para que los avisos lleguen aunque cierres la ventana. El icono muestra las tareas pendientes de hoy.
 - **Instalable o portable.** La versión portable guarda los datos junto al ejecutable.

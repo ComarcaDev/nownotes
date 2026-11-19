@@ -42,6 +42,9 @@ CREATE INDEX IF NOT EXISTS idx_items_deleted ON items(deleted_at);
 /// v3: orden manual (arrastrar para reordenar). 0 = sin orden manual (aparece arriba).
 const SCHEMA_V3: &str = "ALTER TABLE items ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;";
 
+/// v4: icono de cada lista (vacío = punto de color).
+const SCHEMA_V4: &str = "ALTER TABLE lists ADD COLUMN icon TEXT NOT NULL DEFAULT '';";
+
 const SCHEMA_V1: &str = "
 CREATE TABLE IF NOT EXISTS lists(
   id INTEGER PRIMARY KEY,
@@ -130,6 +133,9 @@ pub struct List {
     pub id: i64,
     pub name: String,
     pub color: String,
+    /// Icono de la lista (vacío = punto de color).
+    #[serde(default)]
+    pub icon: String,
     pub sort: i64,
     #[serde(default)]
     pub count: i64,
@@ -232,6 +238,10 @@ pub fn init(c: &Connection) -> R<()> {
     if v < 3 {
         c.execute_batch(SCHEMA_V3)?;
         c.pragma_update(None, "user_version", 3)?;
+    }
+    if v < 4 {
+        c.execute_batch(SCHEMA_V4)?;
+        c.pragma_update(None, "user_version", 4)?;
     }
     Ok(())
 }
@@ -670,7 +680,7 @@ pub fn complete_from_alert(c: &Connection, id: i64, now: i64) -> R<()> {
 
 pub fn list_lists(c: &Connection) -> R<Vec<List>> {
     let mut st = c.prepare(
-        "SELECT l.id, l.name, l.color, l.sort,
+        "SELECT l.id, l.name, l.color, l.icon, l.sort,
                 (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id AND i.done = 0 AND i.deleted_at IS NULL)
          FROM lists l ORDER BY l.sort, l.id",
     )?;
@@ -680,21 +690,22 @@ pub fn list_lists(c: &Connection) -> R<Vec<List>> {
                 id: r.get(0)?,
                 name: r.get(1)?,
                 color: r.get(2)?,
-                sort: r.get(3)?,
-                count: r.get(4)?,
+                icon: r.get(3)?,
+                sort: r.get(4)?,
+                count: r.get(5)?,
             })
         })?
         .collect::<R<Vec<_>>>()?;
     Ok(v)
 }
 
-pub fn save_list(c: &Connection, id: Option<i64>, name: &str, color: &str) -> R<i64> {
+pub fn save_list(c: &Connection, id: Option<i64>, name: &str, color: &str, icon: &str) -> R<i64> {
     let name = name.trim();
     match id {
         Some(id) => {
             c.execute(
-                "UPDATE lists SET name=?2, color=?3 WHERE id=?1",
-                params![id, name, color],
+                "UPDATE lists SET name=?2, color=?3, icon=?4 WHERE id=?1",
+                params![id, name, color, icon],
             )?;
             Ok(id)
         }
@@ -704,8 +715,8 @@ pub fn save_list(c: &Connection, id: Option<i64>, name: &str, color: &str) -> R<
                     r.get(0)
                 })?;
             c.execute(
-                "INSERT INTO lists(name, color, sort) VALUES(?1, ?2, ?3)",
-                params![name, color, sort],
+                "INSERT INTO lists(name, color, icon, sort) VALUES(?1, ?2, ?3, ?4)",
+                params![name, color, icon, sort],
             )?;
             Ok(c.last_insert_rowid())
         }
@@ -794,7 +805,7 @@ pub fn import_all(c: &Connection, data: &ExportData, now: i64) -> R<usize> {
             .find(|e| e.name.eq_ignore_ascii_case(&l.name))
         {
             Some(e) => e.id,
-            None => save_list(&tx, None, &l.name, &l.color)?,
+            None => save_list(&tx, None, &l.name, &l.color, &l.icon)?,
         };
         map.insert(l.id, id);
     }
@@ -995,7 +1006,8 @@ mod tests {
         let v: i64 = c
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 3);
+        assert_eq!(v, 4);
+        assert_eq!(list_lists(&c).unwrap()[0].icon, ""); // listas antiguas: sin icono
         let items = query_items(&c, &f("tasks"), 0).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].title, "Vieja");
@@ -1031,11 +1043,30 @@ mod tests {
     #[test]
     fn export_import_roundtrip() {
         let c = open_in_memory().unwrap();
-        save_list(&c, None, "Casa", "#ff0000").unwrap();
+        save_list(&c, None, "Casa", "#ff0000", "home").unwrap();
         save_item(&c, &task("A", None, "none"), 1).unwrap();
         let data = export_all(&c).unwrap();
         let c2 = open_in_memory().unwrap();
         assert_eq!(import_all(&c2, &data, 10).unwrap(), 1);
-        assert_eq!(list_lists(&c2).unwrap().len(), 2);
+        let lists = list_lists(&c2).unwrap();
+        assert_eq!(lists.len(), 2);
+        assert_eq!(lists[1].icon, "home");
+    }
+
+    #[test]
+    fn list_icon_is_saved_and_old_exports_import() {
+        let c = open_in_memory().unwrap();
+        let id = save_list(&c, None, "Cocina", "#ca5010", "").unwrap();
+        save_list(&c, Some(id), "Cocina", "#038387", "chef").unwrap();
+        let l = list_lists(&c)
+            .unwrap()
+            .into_iter()
+            .find(|l| l.id == id)
+            .unwrap();
+        assert_eq!((l.color.as_str(), l.icon.as_str()), ("#038387", "chef"));
+        // Una exportación de 2.0 no trae «icon».
+        let old: List =
+            serde_json::from_str(r##"{"id":7,"name":"X","color":"#000","sort":1}"##).unwrap();
+        assert_eq!(old.icon, "");
     }
 }

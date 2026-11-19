@@ -5,6 +5,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import Icon from "./Icon.svelte";
   import ShortcutsSettings from "./ShortcutsSettings.svelte";
+  import AppearanceSettings from "./AppearanceSettings.svelte";
   import { api, type BackupInfo, type Info, type Settings } from "../api";
   import { SOUNDS, playSound, parseVolume } from "../sound";
   import { checkForUpdate, type UpdateInfo } from "../updates";
@@ -135,6 +136,7 @@
     </header>
 
     <div class="content">
+      <AppearanceSettings onerror={(m) => (error = m)} />
       <ShortcutsSettings />
 
       <section>

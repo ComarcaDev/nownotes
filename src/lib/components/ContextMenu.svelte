@@ -1,8 +1,8 @@
 <script lang="ts">
   import Icon from "./Icon.svelte";
+  import ListMark from "./ListMark.svelte";
   import type { Item, List } from "../api";
   import type { MenuAction } from "../actions";
-  import { INBOX_ID } from "../items";
 
   let {
     x,
@@ -63,7 +63,7 @@
     <div class="scroll">
       {#each lists as l (l.id)}
         <button class="menu-item" role="menuitem" class:current={l.id === item.listId} onclick={() => act({ move: l.id })}>
-          {#if l.id === INBOX_ID}<Icon name="inbox" size={14} />{:else}<i class="dot" style:background={l.color}></i>{/if}
+          <span class="mark"><ListMark list={l} size={14} /></span>
           {l.name}
         </button>
       {/each}
@@ -95,6 +95,6 @@
   .menu { width: 230px; display: flex; flex-direction: column; outline: none; }
   .sep { height: 1px; background: var(--border); margin: 4px 0; }
   .scroll { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; margin: 0 2px; }
+  .mark { width: 14px; display: inline-grid; place-items: center; }
   .back { width: 14px; text-align: center; font-size: 16px; line-height: 1; }
 </style>

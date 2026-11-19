@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fly } from "svelte/transition";
   import Icon from "./Icon.svelte";
+  import ListMark from "./ListMark.svelte";
   import QuickReminder from "./QuickReminder.svelte";
   import type { Item, List } from "../api";
   import type { ItemActions } from "../actions";
@@ -97,7 +98,7 @@
       {/if}
       {#if item.body.trim()}<span title="Tiene notas"><Icon name="note" size={12} /></span>{/if}
       {#if showList && list && list.id !== INBOX_ID}
-        <span><i class="dot" style:background={list.color}></i>{list.name}</span>
+        <span><ListMark {list} size={12} />{list.name}</span>
       {/if}
       {#each item.tags as t (t)}<span class="tag">#{t}</span>{/each}
     </div>
@@ -156,7 +157,6 @@
   .meta:empty { display: none; }
   .meta span { display: inline-flex; align-items: center; gap: 4px; }
   .meta .overdue { color: var(--danger); }
-  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
   .tag { color: var(--accent); }
   .actions { display: flex; gap: 0; opacity: 0; transition: opacity 0.1s; }
   .row:hover .actions, .row.selected .actions, .actions:focus-within { opacity: 1; }

@@ -37,7 +37,7 @@ export interface ItemInput {
   tags: string[];
 }
 
-export interface List { id: number; name: string; color: string; sort: number; count: number }
+export interface List { id: number; name: string; color: string; icon: string; sort: number; count: number }
 export interface TagCount { name: string; count: number }
 export interface Counts { today: number; todayTasks: number; upcoming: number; tasks: number; notes: number; done: number; trash: number }
 export interface Filter { view: View; listId?: number | null; tag?: string | null; search?: string | null }
@@ -61,7 +61,8 @@ export const api = {
   deleteItem: (id: number) => invoke<void>("delete_item", { id }),
   toggleDone: (id: number) => invoke<Item>("toggle_done", { id }),
   lists: () => invoke<List[]>("list_lists"),
-  saveList: (id: number | null, name: string, color: string) => invoke<number>("save_list", { id, name, color }),
+  saveList: (id: number | null, name: string, color: string, icon = "") =>
+    invoke<number>("save_list", { id, name, color, icon }),
   deleteList: (id: number) => invoke<void>("delete_list", { id }),
   tags: () => invoke<TagCount[]>("list_tags"),
   counts: () => invoke<Counts>("counts"),
@@ -85,4 +86,7 @@ export const api = {
   listBackups: () => invoke<BackupInfo[]>("list_backups"),
   restoreBackup: (name: string) => invoke<void>("restore_backup", { name }),
   openBackupsDir: () => invoke<void>("open_backups_dir"),
+  backgroundPath: () => invoke<string | null>("background_path"),
+  setBackground: (path: string) => invoke<string>("set_background", { path }),
+  clearBackground: () => invoke<void>("clear_background"),
 };

@@ -1,5 +1,7 @@
 <script lang="ts">
   import Icon from "./Icon.svelte";
+  import ListMark from "./ListMark.svelte";
+  import ListStyle from "./ListStyle.svelte";
   import { api, type Counts, type Filter, type List, type TagCount } from "../api";
   import { confirmDanger } from "../confirm";
   import { INBOX_ID, todayBreakdown } from "../items";
@@ -30,7 +32,8 @@
     onsettings: () => void;
   } = $props();
 
-  const COLORS = ["#0067c0", "#c239b3", "#038387", "#ca5010", "#8764b8", "#498205", "#d13438", "#986f0b"];
+  // Las listas nuevas van rotando colores bien distintos entre sí.
+  const NEW_LIST_COLORS = ["#0067c0", "#c239b3", "#038387", "#ca5010", "#8764b8", "#498205", "#d13438", "#986f0b"];
 
   const smart = [
     { view: "today", label: "Hoy", icon: "sun" },
@@ -55,19 +58,23 @@
     adding = false;
     newName = "";
     if (!name) return;
-    const id = await safe(() => api.saveList(null, name, COLORS[lists.length % COLORS.length]), "No se pudo crear la lista");
+    const color = NEW_LIST_COLORS[lists.length % NEW_LIST_COLORS.length];
+    const id = await safe(() => api.saveList(null, name, color), "No se pudo crear la lista");
     if (id != null) onselect({ view: "list", listId: id });
   }
 
   async function rename(l: List) {
     const name = editName.trim();
     editingId = null;
-    if (name && name !== l.name) await safe(() => api.saveList(l.id, name, l.color), "No se pudo renombrar la lista");
+    if (name && name !== l.name) await safe(() => api.saveList(l.id, name, l.color, l.icon), "No se pudo renombrar la lista");
   }
 
-  async function cycleColor(l: List) {
-    const next = COLORS[(COLORS.indexOf(l.color) + 1) % COLORS.length];
-    await safe(() => api.saveList(l.id, l.name, next), "No se pudo cambiar el color");
+  // Selector de color e icono, anclado junto a la lista.
+  let styling = $state<{ list: List; x: number; y: number } | null>(null);
+
+  function openStyle(l: List, e: MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).closest(".nav-row")!.getBoundingClientRect();
+    styling = { list: l, x: r.right + 6, y: r.top };
   }
 
   async function remove(l: List) {
@@ -134,21 +141,21 @@
           <button
             class="nav"
             class:active={filter.view === "list" && filter.listId === l.id && !search}
-            title={compact ? l.name : l.id !== INBOX_ID ? "Doble clic para renombrar" : undefined}
+            title={compact ? l.name : l.id !== INBOX_ID ? "Doble clic para renombrar · clic derecho para color e icono" : undefined}
             aria-label={compact ? l.name : undefined}
             onclick={() => onselect({ view: "list", listId: l.id })}
             ondblclick={() => { if (l.id !== INBOX_ID && !compact) { editingId = l.id; editName = l.name; } }}
+            oncontextmenu={(e) => { if (l.id !== INBOX_ID) { e.preventDefault(); openStyle(l, e); } }}
           >
-            {#if l.id === INBOX_ID}
-              <Icon name="inbox" />
+            {#if l.id === INBOX_ID || compact}
+              <span class="mark"><ListMark list={l} /></span>
             {:else}
               <span
-                class="dot"
-                style:background={l.color}
+                class="mark pick"
                 role="presentation"
-                title="Cambiar color"
-                onclick={(e) => { if (!compact) { e.stopPropagation(); cycleColor(l); } }}
-              ></span>
+                title="Cambiar color e icono"
+                onclick={(e) => { e.stopPropagation(); openStyle(l, e); }}
+              ><ListMark list={l} /></span>
             {/if}
             {#if !compact}<span class="label">{l.name}</span>{/if}
             {#if l.count > 0 && !compact}<span class="count">{l.count}</span>{/if}
@@ -209,6 +216,10 @@
   </div>
 </aside>
 
+{#if styling}
+  <ListStyle list={styling.list} x={styling.x} y={styling.y} onclose={() => (styling = null)} />
+{/if}
+
 <style>
   .sidebar { display: flex; flex-direction: column; padding: 10px 8px; gap: 2px; min-height: 0; min-width: 0; }
   .search {
@@ -239,7 +250,9 @@
     position: absolute; top: 2px; right: 4px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px;
     font-size: 9.5px; line-height: 15px; text-align: center; background: var(--accent); color: var(--accent-text);
   }
-  .dot { width: 10px; height: 10px; border-radius: 50%; margin: 0 3px; flex: none; }
+  .mark { width: 16px; height: 16px; display: grid; place-items: center; flex: none; }
+  .pick { border-radius: 4px; outline: 4px solid transparent; transition: background 0.1s, outline-color 0.1s; }
+  .pick:hover { background: var(--hover); outline-color: var(--hover); }
   .section {
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 6px 4px 10px; font-size: 12px; font-weight: 600; color: var(--text-2);

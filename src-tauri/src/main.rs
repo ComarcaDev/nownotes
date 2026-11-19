@@ -252,6 +252,9 @@ fn main() {
             commands::list_backups,
             commands::restore_backup,
             commands::open_backups_dir,
+            commands::background_path,
+            commands::set_background,
+            commands::clear_background,
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|e| fatal("No se pudo iniciar NowNotes", e));

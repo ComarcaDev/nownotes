@@ -1,6 +1,6 @@
 [package]
 name = "nownotes"
-version = "2.0.2"
+version = "2.1.0"
 description = "Notas y tareas rápidas con recordatorios"
 authors = ["hujeanpaes"]
 license = "MIT"

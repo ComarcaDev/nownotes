@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { LIST_ICON_PATHS } from "../listIcons";
+
   let { name, size = 16 }: { name: string; size?: number } = $props();
 
   const PATHS: Record<string, string> = {
@@ -48,5 +50,5 @@
   stroke-linejoin="round"
   aria-hidden="true"
 >
-  <path d={PATHS[name] ?? ""} fill={name === "pinned" || name === "anchored" ? "currentColor" : "none"} />
+  <path d={PATHS[name] ?? LIST_ICON_PATHS[name] ?? ""} fill={name === "pinned" || name === "anchored" ? "currentColor" : "none"} />
 </svg>

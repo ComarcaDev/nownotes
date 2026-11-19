@@ -19,6 +19,7 @@
   import ItemList from "../lib/components/ItemList.svelte";
   import Editor from "../lib/components/Editor.svelte";
   import Toast from "../lib/components/Toast.svelte";
+  import Backdrop from "../lib/components/Backdrop.svelte";
   import Icon from "../lib/components/Icon.svelte";
   import WindowToolbar from "../lib/components/WindowToolbar.svelte";
 
@@ -425,6 +426,7 @@
   {#await loadSettings() then m}<m.default onclose={() => (showSettings = false)} />{/await}
 {/if}
 
+<Backdrop />
 <Toast />
 
 <style>

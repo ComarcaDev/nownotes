@@ -2,6 +2,17 @@
 
 Todos los cambios relevantes de NowNotes (antes «Apunta») se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [2.1.0] - 2026-11-19
+
+### Añadido
+- **Color e icono para cada lista**: clic en el punto de la lista (o clic derecho sobre ella) abre una paleta de 12 colores más uno personalizado, y 25 iconos según la actividad (trabajo, oficina, estudio, cocina, compras, viaje, salud…), con buscador. El icono aparece en la barra lateral, el menú «Mover a» y las filas.
+- **Apariencia personalizable** (Ajustes → Apariencia), con vista previa en vivo:
+  - Tema oscuro, claro o del sistema.
+  - Color de acento (10 colores o uno propio); el texto sobre el acento se ajusta solo para leerse bien.
+  - Tono de paneles y tarjetas: neutro, frío, cálido o del acento.
+  - Fondo Mica, de color (con aviso si contrasta poco con el texto) o **imagen propia**: se adapta a la ventana en ambos modos, con enfoque, atenuado, desenfoque y opacidad de los paneles. Se recomienda 1920 × 1080 o mayor; avisa si la imagen es pequeña.
+  - «Restablecer» vuelve a la apariencia original.
+
 ## [2.0.2] - 2026-11-19
 
 ### Corregido
@@ -107,6 +118,7 @@ Primera versión estable.
 ### Distribución
 - Instalador NSIS para el usuario actual (sin permisos de administrador) y versión portable en .zip, que guarda los datos junto al ejecutable.
 
+[2.1.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.1.0
 [2.0.2]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.2
 [2.0.1]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.1
 [2.0.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.0
