@@ -2,6 +2,17 @@
 
 Todos los cambios relevantes de NowNotes (antes «Apunta») se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [2.1.1] - 2026-11-19
+
+### Añadido
+- **Restablecer cada opción**: en Ajustes, las opciones que no tienen su valor original muestran un pequeño ↺ junto a su nombre (apariencia, sonido, volumen, notificación, opciones generales y cada atajo).
+- **Restablecer por sección**: Apariencia, Recordatorios, General y Atajos tienen su botón, que solo aparece si hay algo cambiado.
+- **Restablecer todo** al final de Ajustes, con un aviso de confirmación (Sí / No). No afecta a tareas, notas, listas ni copias.
+- Todos los restablecimientos muestran **«Deshacer»** para volver a como estaba.
+
+### Cambiado
+- Restablecer la apariencia ya no borra la imagen de fondo guardada (solo vuelve a Mica), para poder deshacerlo. Para quitarla sigue estando el botón de la papelera.
+
 ## [2.1.0] - 2026-11-19
 
 ### Añadido
@@ -118,6 +129,7 @@ Primera versión estable.
 ### Distribución
 - Instalador NSIS para el usuario actual (sin permisos de administrador) y versión portable en .zip, que guarda los datos junto al ejecutable.
 
+[2.1.1]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.1.1
 [2.1.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.1.0
 [2.0.2]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.2
 [2.0.1]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.1

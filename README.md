@@ -28,6 +28,7 @@ Ligera (unos 2 MB), moderna y sin cuentas: todo se guarda en tu equipo.
 - **Anclar la ventana** encima de todas las demás, en cualquiera de los dos modos.
 - **Diseño Windows 11** con efecto Mica. Tema oscuro por defecto y claro con un clic en el sol o la luna.
 - **Apariencia personalizable** en Ajustes: color de acento, tono de las superficies y fondo Mica, de color o con **tu propia imagen** (enfoque, atenuado, desenfoque y opacidad de los paneles). Para la imagen se recomienda 1920 × 1080 o mayor (16:9), JPG o WebP de menos de 5 MB.
+- **Volver atrás sin miedo**: cada opción cambiada muestra un ↺ para restablecerla, cada sección tiene su «Restablecer» y hay un «Restablecer todo». Siempre con «Deshacer».
 - **Atajos configurables**, con aviso si chocan con Windows u otra aplicación.
 - **Bandeja del sistema e inicio con Windows**, para que los avisos lleguen aunque cierres la ventana. El icono muestra las tareas pendientes de hoy.
 - **Instalable o portable.** La versión portable guarda los datos junto al ejecutable.

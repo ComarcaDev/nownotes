@@ -9,8 +9,11 @@
   import { api, type BackupInfo, type Info, type Settings } from "../api";
   import { SOUNDS, playSound, parseVolume } from "../sound";
   import { checkForUpdate, type UpdateInfo } from "../updates";
+  import { listen } from "@tauri-apps/api/event";
+  import ResetButton from "./ResetButton.svelte";
   import { confirmDanger } from "../confirm";
   import { getInfo } from "../info";
+  import { ALL_RESETTABLE, isModified, resetWithUndo, SETTING_DEFAULTS, type ResettableKey } from "../defaults";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -31,7 +34,40 @@
     getInfo().then((v) => (info = v)).catch(() => {});
     api.listBackups().then((v) => (backups = v)).catch(() => {});
     isEnabled().then((v) => (autostart = v)).catch(() => (autostart = false));
+    // Restablecer, «Deshacer» u otra ventana: los controles reflejan el valor guardado.
+    let unlisten: (() => void) | undefined;
+    listen<[string, string]>("settings-changed", (e) => {
+      const [key, value] = e.payload;
+      s[key] = value;
+    }).then((u) => (unlisten = u));
+    return () => unlisten?.();
   });
+
+  // ---------- restablecer ----------
+
+  const volumeChanged = $derived(parseVolume(s.volume) !== parseVolume(SETTING_DEFAULTS.volume));
+  const mod = (k: ResettableKey) => (k === "volume" ? volumeChanged : isModified(k, s[k]));
+  // El archivo de sonido propio solo cuenta si está en uso; al restablecer también se olvida.
+  const REMINDER_KEYS: ResettableKey[] = ["sound", "volume", "native_toast"];
+  const GENERAL_KEYS: ResettableKey[] = ["close_to_tray", "update_check"];
+  const defaultsOf = (keys: ResettableKey[]) => Object.fromEntries(keys.map((k) => [k, SETTING_DEFAULTS[k]]));
+
+  function reset(what: string, ...keys: ResettableKey[]) {
+    clearMessages();
+    resetWithUndo(what, defaultsOf(keys));
+  }
+
+  async function resetAll() {
+    const ok = await confirmDanger(
+      "¿Restablecer todos los ajustes?",
+      "Todo volverá a como estaba al instalar NowNotes: apariencia, sonidos, opciones generales y atajos.\n\nTus tareas, notas, listas y copias de seguridad no se tocan.",
+      "Sí, restablecer",
+      "No"
+    );
+    if (!ok) return;
+    clearMessages();
+    await resetWithUndo("todos los ajustes", defaultsOf(ALL_RESETTABLE));
+  }
 
   function clearMessages() {
     error = "";
@@ -140,9 +176,14 @@
       <ShortcutsSettings />
 
       <section>
-        <h3>Recordatorios</h3>
+        <div class="head">
+          <h3>Recordatorios</h3>
+          {#if REMINDER_KEYS.some(mod)}
+            <button class="btn subtle small-btn" onclick={() => reset("los recordatorios", ...REMINDER_KEYS, "sound_path")}><Icon name="restore" size={13} />Restablecer</button>
+          {/if}
+        </div>
         <div class="row">
-          <div>Sonido</div>
+          <div class="lbl">Sonido<ResetButton show={mod("sound")} label="el sonido (Campanilla)" onclick={() => reset("el sonido", "sound")} /></div>
           <div class="ctl">
             <select aria-label="Sonido del aviso" value={s.sound} onchange={(e) => onSoundChange(e.currentTarget)}>
               {#each SOUNDS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
@@ -159,19 +200,24 @@
           </div>
         {/if}
         <div class="row">
-          <div>Volumen</div>
+          <div class="lbl">Volumen<ResetButton show={volumeChanged} label="el volumen (70 %)" onclick={() => reset("el volumen", "volume")} /></div>
           <input type="range" min="0" max="1" step="0.05" aria-label="Volumen" value={parseVolume(s.volume)} onchange={(e) => setKey("volume", e.currentTarget.value)} />
         </div>
         <label class="row">
-          <div><div>Notificación de Windows</div><div class="faint small">Además de la ventana de aviso, enviar una notificación al centro de actividades.</div></div>
+          <div><div class="lbl">Notificación de Windows<ResetButton show={mod("native_toast")} label="la notificación de Windows (activada)" onclick={() => reset("la notificación de Windows", "native_toast")} /></div><div class="faint small">Además de la ventana de aviso, enviar una notificación al centro de actividades.</div></div>
           <input type="checkbox" class="toggle" checked={s.native_toast !== "0"} onchange={(e) => setKey("native_toast", e.currentTarget.checked ? "1" : "0")} />
         </label>
       </section>
 
       <section>
-        <h3>General</h3>
+        <div class="head">
+          <h3>General</h3>
+          {#if GENERAL_KEYS.some(mod)}
+            <button class="btn subtle small-btn" onclick={() => reset("las opciones generales", ...GENERAL_KEYS)}><Icon name="restore" size={13} />Restablecer</button>
+          {/if}
+        </div>
         <label class="row">
-          <div><div>Seguir en la bandeja al cerrar</div><div class="faint small">Necesario para recibir avisos con la ventana cerrada.</div></div>
+          <div><div class="lbl">Seguir en la bandeja al cerrar<ResetButton show={mod("close_to_tray")} label="seguir en la bandeja (activado)" onclick={() => reset("seguir en la bandeja", "close_to_tray")} /></div><div class="faint small">Necesario para recibir avisos con la ventana cerrada.</div></div>
           <input type="checkbox" class="toggle" checked={s.close_to_tray !== "0"} onchange={(e) => setKey("close_to_tray", e.currentTarget.checked ? "1" : "0")} />
         </label>
         <label class="row">
@@ -179,7 +225,7 @@
           <input type="checkbox" class="toggle" checked={autostart} onchange={toggleAutostart} />
         </label>
         <label class="row">
-          <div><div>Buscar actualizaciones</div><div class="faint small">Una vez al día, consulta en GitHub si hay una versión nueva. No descarga nada.</div></div>
+          <div><div class="lbl">Buscar actualizaciones<ResetButton show={mod("update_check")} label="buscar actualizaciones (activado)" onclick={() => reset("buscar actualizaciones", "update_check")} /></div><div class="faint small">Una vez al día, consulta en GitHub si hay una versión nueva. No descarga nada.</div></div>
           <input type="checkbox" class="toggle" checked={s.update_check !== "0"} onchange={(e) => setKey("update_check", e.currentTarget.checked ? "1" : "0")} />
         </label>
         <div class="row">
@@ -227,6 +273,14 @@
 
       {#if error}<div class="msg error">{error}</div>{/if}
       {#if message}<div class="msg">{message}</div>{/if}
+
+      <div class="reset-all">
+        <div>
+          <div>Restablecer todos los ajustes</div>
+          <div class="faint small">Apariencia, sonidos, opciones generales y atajos. No afecta a tus tareas ni notas.</div>
+        </div>
+        <button class="btn" onclick={resetAll}><Icon name="restore" size={13} />Restablecer todo…</button>
+      </div>
     </div>
   </div>
 </div>
@@ -248,6 +302,13 @@
   .row.slim { padding: 6px 6px 6px 14px; }
   .row.buttons { justify-content: flex-start; gap: 8px; }
   .info { min-width: 0; }
+  .head { display: flex; align-items: center; justify-content: space-between; min-height: 38px; }
+  .small-btn { font-size: 12px; padding: 3px 8px; margin-top: 10px; }
+  .lbl { display: inline-flex; align-items: center; min-height: 20px; }
+  .reset-all {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    margin-top: 22px; padding: 14px; border-radius: 6px; border: 1px dashed var(--border-strong);
+  }
   .sub { display: flex; align-items: center; justify-content: space-between; margin: 12px 2px 4px; font-size: 12px; color: var(--text-2); }
   .empty { padding: 4px 2px; }
   .ctl { display: flex; align-items: center; gap: 4px; }

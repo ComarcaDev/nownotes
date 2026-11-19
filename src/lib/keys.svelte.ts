@@ -126,19 +126,3 @@ export async function setGlobalKey(action: GlobalAction, combo: string): Promise
   await api.setSetting(g.setting, combo); // Rust comprueba si Windows u otra app ya lo usa
   keys.global[action] = combo;
 }
-
-export async function resetAllKeys(): Promise<string[]> {
-  const errors: string[] = [];
-  await api.setSetting("keys", JSON.stringify(appDefaults()));
-  keys.app = appDefaults();
-  // Primero se liberan los globales para que no choquen entre sí al reasignarlos.
-  for (const g of GLOBAL_ACTIONS) await setGlobalKey(g.id, "").catch(() => {});
-  for (const g of GLOBAL_ACTIONS) {
-    try {
-      await setGlobalKey(g.id, g.def);
-    } catch (e) {
-      errors.push(String(e));
-    }
-  }
-  return errors;
-}

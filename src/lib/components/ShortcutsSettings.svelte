@@ -2,13 +2,16 @@
   // Sección «Atajos» de Ajustes: cambiar, quitar y restablecer cada atajo.
   import {
     APP_ACTIONS, GLOBAL_ACTIONS, keys, comboFromEvent, display, validate,
-    setAppKey, setGlobalKey, resetAllKeys, type AppAction, type GlobalAction,
+    setAppKey, setGlobalKey, type AppAction, type GlobalAction,
   } from "../keys.svelte";
+  import Icon from "./Icon.svelte";
+  import ResetButton from "./ResetButton.svelte";
+  import { resetWithUndo, SETTING_DEFAULTS } from "../defaults";
 
-  type Row = { id: string; label: string; global: boolean; hint?: string };
+  type Row = { id: string; label: string; global: boolean; def: string; setting?: string; hint?: string };
   const rows: Row[] = [
-    ...GLOBAL_ACTIONS.map((g) => ({ id: g.id, label: g.label, global: true, hint: "Funciona desde cualquier programa" })),
-    ...APP_ACTIONS.map((a) => ({ id: a.id, label: a.label, global: false })),
+    ...GLOBAL_ACTIONS.map((g) => ({ id: g.id, label: g.label, global: true, def: g.def, setting: g.setting, hint: "Funciona desde cualquier programa" })),
+    ...APP_ACTIONS.map((a) => ({ id: a.id, label: a.label, global: false, def: a.def })),
   ];
 
   let capturing = $state<string | null>(null);
@@ -43,9 +46,23 @@
     apply(r, combo);
   }
 
-  async function resetAll() {
-    const errors = await resetAllKeys();
-    messages = errors.length ? { _all: { error: errors.join(" ") } } : { _all: { ok: "Atajos restablecidos" } };
+  const anyChanged = $derived(rows.some((r) => current(r) !== r.def));
+
+  function resetRow(r: Row) {
+    messages[r.id] = {};
+    const values: Record<string, string> = r.global
+      ? { [r.setting!]: r.def }
+      : { keys: JSON.stringify({ ...keys.app, [r.id]: r.def }) };
+    resetWithUndo(`el atajo «${r.label}»`, values);
+  }
+
+  function resetAll() {
+    messages = {};
+    resetWithUndo("los atajos", {
+      keys: SETTING_DEFAULTS.keys,
+      shortcut: SETTING_DEFAULTS.shortcut,
+      shortcut_toggle: SETTING_DEFAULTS.shortcut_toggle,
+    });
   }
 </script>
 
@@ -55,7 +72,7 @@
     {#if i === GLOBAL_ACTIONS.length}<div class="sub">En la app</div>{:else if i === 0}<div class="sub">Globales</div>{/if}
     <div class="row">
       <div class="info">
-        <div>{r.label}</div>
+        <div class="lbl">{r.label}<ResetButton show={current(r) !== r.def} label={`el atajo (${display(r.def)})`} onclick={() => resetRow(r)} /></div>
         {#if messages[r.id]?.error}<div class="msg error">{messages[r.id].error}</div>
         {:else if messages[r.id]?.warning}<div class="msg warn">{messages[r.id].warning}</div>
         {:else if messages[r.id]?.ok}<div class="msg ok">{messages[r.id].ok}</div>
@@ -75,10 +92,8 @@
   {/each}
   <div class="row foot">
     <span class="faint small">Pulsa un atajo para cambiarlo. Supr lo quita y Esc cancela.</span>
-    <button class="btn subtle" onclick={resetAll}>Restablecer</button>
+    {#if anyChanged}<button class="btn subtle" onclick={resetAll}><Icon name="restore" size={13} />Restablecer atajos</button>{/if}
   </div>
-  {#if messages._all?.error}<div class="msg error">{messages._all.error}</div>{/if}
-  {#if messages._all?.ok}<div class="msg ok">{messages._all.ok}</div>{/if}
 </section>
 
 <style>
@@ -90,6 +105,7 @@
   }
   .row.foot { background: transparent; border: none; padding: 6px 2px; }
   .info { min-width: 0; }
+  .lbl { display: inline-flex; align-items: center; min-height: 20px; }
   .small { font-size: 12px; }
   .combo { min-width: 160px; justify-content: center; font-family: Consolas, monospace; font-size: 12.5px; }
   .combo.capturing { border-color: var(--accent); color: var(--accent); }
