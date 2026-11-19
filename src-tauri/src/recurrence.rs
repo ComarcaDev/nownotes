@@ -4,14 +4,14 @@ use chrono::{
     DateTime, Datelike, Duration, Local, LocalResult, Months, NaiveDateTime, TimeZone, Weekday,
 };
 
-pub const RULES: &[&str] = &["none", "daily", "weekdays", "weekly", "monthly", "yearly"];
+const RULES: &[&str] = &["none", "daily", "weekdays", "weekly", "monthly", "yearly"];
 
 pub fn normalize(rule: &str) -> &'static str {
     RULES.iter().copied().find(|r| *r == rule).unwrap_or("none")
 }
 
 /// Avanza una repetición manteniendo la hora "de reloj" local.
-pub fn step<Tz: TimeZone>(dt: &DateTime<Tz>, rule: &str) -> Option<DateTime<Tz>> {
+fn step<Tz: TimeZone>(dt: &DateTime<Tz>, rule: &str) -> Option<DateTime<Tz>> {
     let tz = dt.timezone();
     let naive = dt.naive_local();
     let next: NaiveDateTime = match rule {
@@ -40,7 +40,7 @@ pub fn step<Tz: TimeZone>(dt: &DateTime<Tz>, rule: &str) -> Option<DateTime<Tz>>
 }
 
 /// Primera repetición estrictamente posterior a `after`.
-pub fn next_after<Tz: TimeZone>(
+fn next_after<Tz: TimeZone>(
     start: DateTime<Tz>,
     rule: &str,
     after_ms: i64,

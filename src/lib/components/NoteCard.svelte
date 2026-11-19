@@ -6,6 +6,10 @@
   import type { ItemActions } from "../actions";
   import { fmt, dayLabel } from "../dates";
   import { renderMarkdown, checkLineFromEvent } from "../markdown";
+  import { displayTitle, INBOX_ID } from "../items";
+
+  /** Líneas del contenido que se muestran en la tarjeta. */
+  const PREVIEW_LINES = 8;
 
   let {
     item,
@@ -26,7 +30,7 @@
 
   // Vista previa: primeras líneas renderizadas, sin enlaces activos.
   const preview = $derived(
-    renderMarkdown(item.body.split(/\r?\n/).slice(0, 8).join("\n")).replace(/<a [^>]*>(.*?)<\/a>/g, "$1")
+    renderMarkdown(item.body.split(/\r?\n/).slice(0, PREVIEW_LINES).join("\n")).replace(/<a [^>]*>(.*?)<\/a>/g, "$1")
   );
 </script>
 
@@ -35,20 +39,28 @@
   class:selected
   role="button"
   tabindex="-1"
+  aria-label={displayTitle(item)}
   data-drag-id={item.id}
   onclick={onClick}
   oncontextmenu={(e) => actions.menu(e, item)}
-  onkeydown={() => {}}
+  onkeydown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) actions.select(item); }}
   in:fly={{ y: -6, duration: 160 }}
 >
-  {#if showList && list && list.id !== 1}<i class="stripe" style:background={list.color}></i>{/if}
+  {#if showList && list && list.id !== INBOX_ID}<i class="stripe" style:background={list.color}></i>{/if}
   {#if draggable}
-    <span class="grip" data-drag-handle title="Arrastrar para ordenar" role="presentation" onclick={(e) => e.stopPropagation()}>
+    <span
+      class="grip"
+      data-drag-handle
+      title="Arrastrar para ordenar"
+      aria-label="Arrastrar para ordenar"
+      role="presentation"
+      onclick={(e) => e.stopPropagation()}
+    >
       <Icon name="grip" size={14} />
     </span>
   {/if}
   <div class="head">
-    <div class="title">{item.title || "Sin título"}</div>
+    <div class="title">{displayTitle(item)}</div>
     {#if item.pinned}<span class="pin"><Icon name="pinned" size={13} /></span>{/if}
   </div>
   {#if item.body.trim()}
@@ -63,11 +75,24 @@
     <span class="date faint">{dayLabel(item.updatedAt)}</span>
   </div>
   <div class="actions">
-    <button class="icon-btn act" class:on={item.pinned} title={item.pinned ? "Desfijar" : "Fijar"} onclick={(e) => { e.stopPropagation(); actions.pin(item); }}>
+    <button
+      class="icon-btn act"
+      class:on={item.pinned}
+      title={item.pinned ? "Desfijar" : "Fijar"}
+      aria-label={item.pinned ? "Desfijar" : "Fijar"}
+      onclick={(e) => { e.stopPropagation(); actions.pin(item); }}
+    >
       <Icon name={item.pinned ? "pinned" : "pin"} size={14} />
     </button>
     <QuickReminder value={item.remindAt} onchange={(v) => actions.setReminder(item, v)} />
-    <button class="icon-btn act" title="Mover a la papelera" onclick={(e) => { e.stopPropagation(); actions.remove(item); }}><Icon name="trash" size={14} /></button>
+    <button
+      class="icon-btn act"
+      title="Mover a la papelera"
+      aria-label="Mover a la papelera"
+      onclick={(e) => { e.stopPropagation(); actions.remove(item); }}
+    >
+      <Icon name="trash" size={14} />
+    </button>
   </div>
 </div>
 
@@ -92,17 +117,15 @@
   .foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11.5px; }
   .chip-s { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
   .tag { color: var(--accent); }
-  .grow { flex: 1; }
   .actions {
     position: absolute; top: 6px; right: 6px; display: flex; opacity: 0; transition: opacity 0.1s;
     background: var(--card); border-radius: var(--radius-sm);
   }
-  .card:hover .actions { opacity: 1; }
+  .card:hover .actions, .actions:focus-within { opacity: 1; }
   .grip {
     position: absolute; left: 50%; top: 2px; translate: -50% 0; display: grid; place-items: center;
     width: 28px; height: 14px; color: var(--text-3); cursor: grab; opacity: 0; touch-action: none;
   }
   .card:hover .grip { opacity: 1; }
-  .preview :global(input) { pointer-events: auto; }
   .act { width: 26px; height: 26px; }
 </style>

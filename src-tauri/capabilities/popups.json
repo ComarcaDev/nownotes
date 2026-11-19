@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "popups",
+  "description": "Ventanas pequeñas: captura rápida y aviso (sin diálogos, enlaces ni autoinicio)",
+  "windows": ["quick", "reminder"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging"
+  ]
+}

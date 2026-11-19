@@ -13,7 +13,7 @@ pub struct Location {
 }
 
 /// Nombre del archivo marcador que activa el modo portable.
-pub const PORTABLE_MARKER: &str = "portable";
+const PORTABLE_MARKER: &str = "portable";
 /// Base de datos actual y la de la versión anterior.
 pub const DB_FILE: &str = "nownotes.db";
 const LEGACY_DB_FILE: &str = "apunta.db";
@@ -34,7 +34,7 @@ fn legacy_folder() -> &'static str {
     }
 }
 
-pub fn resolve(exe_dir: Option<&Path>, appdata: Option<PathBuf>) -> Location {
+fn resolve(exe_dir: Option<&Path>, appdata: Option<PathBuf>) -> Location {
     if let Some(dir) = exe_dir {
         if dir.join(PORTABLE_MARKER).is_file() {
             return Location {

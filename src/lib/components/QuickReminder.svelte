@@ -9,6 +9,23 @@
   let pos = $state({ x: 0, y: 0 });
   let presets = $state(reminderPresets());
 
+  // Los listeners globales solo existen con el menú abierto (antes había dos por cada fila).
+  $effect(() => {
+    if (!open) return;
+    const close = () => (open = false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation(); // Esc cierra solo este menú, no también el editor
+      open = false;
+    };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  });
+
   function toggle(e: MouseEvent) {
     e.stopPropagation();
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -23,33 +40,47 @@
   }
 </script>
 
-<svelte:window onmousedown={() => (open = false)} onkeydown={(e) => e.key === "Escape" && (open = false)} />
-
-<button class="icon-btn act" class:on={value != null} title="Recordatorio" onclick={toggle}>
+<button
+  class="icon-btn act"
+  class:on={value != null}
+  title="Recordatorio"
+  aria-label="Recordatorio"
+  aria-haspopup="menu"
+  aria-expanded={open}
+  onclick={toggle}
+>
   <Icon name="bell" size={15} />
 </button>
 
 {#if open}
-  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-  <div class="popover menu" style:left="{pos.x}px" style:top="{pos.y}px" onmousedown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+  <div
+    class="popover menu"
+    role="menu"
+    tabindex="-1"
+    aria-label="Recordatorio rápido"
+    style:left="{pos.x}px"
+    style:top="{pos.y}px"
+    onmousedown={(e) => e.stopPropagation()}
+    onclick={(e) => e.stopPropagation()}
+    onkeydown={() => {}}
+  >
     {#each presets as p (p.label)}
-      <button class="mi" onclick={() => pick(p.value)}><Icon name="bell" size={13} />{p.label}</button>
+      <button class="menu-item" role="menuitem" onclick={() => pick(p.value)}><Icon name="bell" size={13} />{p.label}</button>
     {/each}
-    <input type="datetime-local" value={toDateTimeInput(value)} onchange={(e) => pick(fromInput(e.currentTarget.value))} />
+    <input
+      type="datetime-local"
+      aria-label="Fecha y hora del recordatorio"
+      value={toDateTimeInput(value)}
+      onchange={(e) => pick(fromInput(e.currentTarget.value))}
+    />
     {#if value != null}
-      <button class="mi danger" onclick={() => pick(null)}><Icon name="x" size={13} />Quitar recordatorio</button>
+      <button class="menu-item danger" role="menuitem" onclick={() => pick(null)}><Icon name="x" size={13} />Quitar recordatorio</button>
     {/if}
   </div>
 {/if}
 
 <style>
   .act { width: 28px; height: 28px; }
-  .menu { width: 200px; display: flex; flex-direction: column; }
-  .mi {
-    display: flex; align-items: center; gap: 10px; border: none; background: transparent;
-    padding: 7px 10px; border-radius: var(--radius-sm); text-align: left; cursor: default;
-  }
-  .mi:hover { background: var(--hover); }
-  .mi.danger { color: var(--danger); }
+  .menu { width: 200px; display: flex; flex-direction: column; outline: none; }
   input { margin: 4px; font-size: 12px; padding: 4px 6px; }
 </style>

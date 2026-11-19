@@ -1,6 +1,8 @@
 // Fechas en lenguaje natural (español e inglés), sin dependencias.
 // «comprar pan mañana 18:00» → título «comprar pan», fecha mañana, aviso a las 18:00.
 
+import { addDays, DAY_MS, HOUR_MS, startOfDay } from "./dates";
+
 export interface Parsed {
   /** Texto sin la expresión de fecha. */
   title: string;
@@ -20,7 +22,7 @@ const MONTHS: Record<string, number> = {
   ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, set: 8, oct: 9, nov: 10, dic: 11,
   jan: 0, apr: 3, aug: 7, dec: 11,
 };
-const UNIT_MS: Record<string, number> = { min: 60_000, h: 3_600_000, d: 86_400_000, w: 604_800_000 };
+const UNIT_MS: Record<string, number> = { min: HOUR_MS / 60, h: HOUR_MS, d: DAY_MS, w: 7 * DAY_MS };
 
 /** Minúsculas y sin tildes, manteniendo la misma longitud que el original (para cortar el título). */
 function fold(s: string): string {
@@ -28,18 +30,6 @@ function fold(s: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/(\p{L})\p{M}+/gu, "$1"); // quita tildes conservando la ñ como «n»
-}
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function addDays(d: Date, n: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
 }
 
 type Span = { start: number; end: number };

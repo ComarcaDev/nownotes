@@ -3,25 +3,37 @@
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { api, type Kind, type List } from "../lib/api";
-  import { startOfDay, fmt, dayLabel } from "../lib/dates";
+  import { startOfDay } from "../lib/dates";
   import { parseDate } from "../lib/nlp";
+  import { INBOX_ID } from "../lib/items";
   import ReminderPicker from "../lib/components/ReminderPicker.svelte";
+  import DetectedDate from "../lib/components/DetectedDate.svelte";
   import Icon from "../lib/components/Icon.svelte";
 
-  const win = getCurrentWindow();
+  const appWindow = getCurrentWindow();
   let text = $state("");
   let kind = $state<Kind>("task");
-  let listId = $state(1);
+  let listId = $state(INBOX_ID);
   let lists = $state<List[]>([]);
   let remindAt = $state<number | null>(null);
   let pickerKey = $state(0);
   let saving = $state(false);
+  let error = $state("");
   let el = $state<HTMLTextAreaElement>();
 
+  // Fechas en lenguaje natural sobre la primera línea («llamar a Ana mañana 9:00»).
+  let nlpOff = $state(false);
+  const firstLine = $derived(text.split("\n")[0] ?? "");
+  const parsed = $derived(nlpOff || !firstLine.trim() ? null : parseDate(firstLine));
+
   async function prepare() {
-    lists = await api.lists();
-    if (!lists.some((l) => l.id === listId)) listId = 1;
-    pickerKey++; // recalcula "En 1 h", etc.
+    try {
+      lists = await api.lists();
+    } catch {
+      lists = [];
+    }
+    if (!lists.some((l) => l.id === listId)) listId = INBOX_ID;
+    pickerKey++; // recalcula «En 1 h», etc.
     await tick();
     el?.focus();
   }
@@ -31,22 +43,19 @@
     remindAt = null;
     kind = "task";
     nlpOff = false;
+    error = "";
   }
-
-  // Fechas en lenguaje natural sobre la primera línea («llamar a Ana mañana 9:00»).
-  let nlpOff = $state(false);
-  const firstLine = $derived(text.split("\n")[0] ?? "");
-  const parsed = $derived(nlpOff || !firstLine.trim() ? null : parseDate(firstLine));
 
   async function hide() {
     reset();
-    await win.hide();
+    await appWindow.hide();
   }
 
   async function submit() {
     const t = text.trim();
     if (!t || saving) return;
     saving = true;
+    error = "";
     const [first, ...rest] = t.split("\n");
     const p = parsed;
     const remind = remindAt ?? p?.remindAt ?? null;
@@ -63,6 +72,8 @@
         tags: [],
       });
       await hide();
+    } catch (e) {
+      error = `No se pudo guardar: ${String(e)}`; // se conserva el texto para reintentar
     } finally {
       saving = false;
     }
@@ -77,40 +88,41 @@
   onMount(() => {
     prepare();
     const un = listen("quick-open", prepare);
-    window.addEventListener("focus", () => el?.focus());
-    return () => { un.then((f) => f()); };
+    const focusInput = () => el?.focus();
+    window.addEventListener("focus", focusInput);
+    return () => {
+      un.then((f) => f());
+      window.removeEventListener("focus", focusInput);
+    };
   });
 </script>
 
 <div class="quick">
   <header data-tauri-drag-region>
-    <div class="segmented">
-      <button class:active={kind === "task"} onclick={() => (kind = "task")}>Tarea</button>
-      <button class:active={kind === "note"} onclick={() => (kind = "note")}>Nota</button>
+    <div class="segmented" role="radiogroup" aria-label="Tipo">
+      <button role="radio" aria-checked={kind === "task"} class:active={kind === "task"} onclick={() => (kind = "task")}>Tarea</button>
+      <button role="radio" aria-checked={kind === "note"} class:active={kind === "note"} onclick={() => (kind = "note")}>Nota</button>
     </div>
-    <span class="grow" data-tauri-drag-region></span>
-    <select bind:value={listId} title="Lista">
+    <span class="drag" data-tauri-drag-region></span>
+    <select bind:value={listId} title="Lista" aria-label="Lista">
       {#each lists as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
     </select>
-    <button class="icon-btn" title="Cerrar (Esc)" onclick={hide}><Icon name="x" /></button>
+    <button class="icon-btn" title="Cerrar (Esc)" aria-label="Cerrar" onclick={hide}><Icon name="x" /></button>
   </header>
 
   <textarea
     bind:this={el}
     bind:value={text}
     onkeydown={onKey}
+    aria-label={kind === "task" ? "Nueva tarea" : "Nueva nota"}
     placeholder={kind === "task" ? "¿Qué tienes que hacer?" : "Escribe tu nota… (Mayús+Enter para nueva línea)"}
   ></textarea>
 
   <footer>
-    {#if parsed}
-      <span class="detected" title={`Detectado: «${parsed.matches.join(" ")}»`}>
-        <Icon name={parsed.remindAt ? "bell" : "calendar"} size={12} />
-        {parsed.remindAt ? fmt(parsed.remindAt) : dayLabel(parsed.dueAt)}
-        <button class="undo" title="No usar esta fecha" aria-label="Descartar fecha detectada" onclick={() => { nlpOff = true; el?.focus(); }}>
-          <Icon name="x" size={11} />
-        </button>
-      </span>
+    {#if error}
+      <span class="error" role="alert">{error}</span>
+    {:else if parsed}
+      <DetectedDate {parsed} ondismiss={() => { nlpOff = true; el?.focus(); }} />
     {:else}
       {#key pickerKey}
         <ReminderPicker value={remindAt} onchange={(v) => (remindAt = v)} compact />
@@ -125,19 +137,12 @@
   .quick { display: flex; flex-direction: column; height: 100%; padding: 10px 14px 12px; gap: 8px; }
   header { display: flex; align-items: center; gap: 8px; }
   header select { padding: 3px 8px; font-size: 12.5px; max-width: 170px; }
-  .grow { flex: 1; align-self: stretch; }
-  .detected {
-    display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px 2px 9px; border-radius: 999px;
-    font-size: 12px; background: var(--accent); color: var(--accent-text);
-  }
-  .undo {
-    display: grid; place-items: center; width: 18px; height: 18px; border: none; border-radius: 50%;
-    background: transparent; color: inherit; cursor: default; padding: 0;
-  }
+  .drag { flex: 1; align-self: stretch; }
   textarea {
     flex: 1; font-size: 16px; line-height: 1.45; padding: 10px 12px;
     background: var(--card); border-radius: 6px;
   }
   footer { display: flex; align-items: center; gap: 8px; }
   .hint { font-size: 11px; white-space: nowrap; }
+  .error { font-size: 12px; color: var(--danger); }
 </style>

@@ -3,6 +3,7 @@
 mod backup;
 mod commands;
 mod db;
+mod logger;
 mod paths;
 mod recurrence;
 mod scheduler;
@@ -10,17 +11,22 @@ mod windows;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use tauri_plugin_global_shortcut::ShortcutState;
 
+/// Evento: cambiaron tareas, notas o listas.
+pub const EV_ITEMS: &str = "items-changed";
+/// Evento: cambió un ajuste (`(clave, valor)`).
+pub const EV_SETTINGS: &str = "settings-changed";
+
 pub struct AppState {
-    pub db: Mutex<rusqlite::Connection>,
+    db: Mutex<rusqlite::Connection>,
     /// Elementos cuyo aviso está a la vista en la ventana de recordatorio.
-    pub alerts: Mutex<Vec<i64>>,
+    alerts: Mutex<Vec<i64>>,
     /// Avisos en pausa hasta este instante (ms).
     pub paused_until: Mutex<i64>,
     /// Atajos globales registrados: acción → combinación.
@@ -28,6 +34,40 @@ pub struct AppState {
     pub data_dir: PathBuf,
     pub portable: bool,
     pub start_minimized: bool,
+}
+
+impl AppState {
+    /// Conexión a la base de datos. Si otro hilo falló con el bloqueo tomado,
+    /// se recupera igualmente: SQLite mantiene la base consistente.
+    pub fn db(&self) -> MutexGuard<'_, rusqlite::Connection> {
+        self.db.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Avisos visibles en la ventana de recordatorio.
+    pub fn alerts(&self) -> MutexGuard<'_, Vec<i64>> {
+        self.alerts.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Quita un elemento de los avisos visibles.
+    pub fn drop_alert(&self, id: i64) {
+        self.alerts().retain(|a| *a != id);
+    }
+
+    pub fn setting(&self, key: &str) -> String {
+        db::get_setting(&self.db(), key)
+    }
+}
+
+/// Error al arrancar: se registra y se muestra en pantalla (en release no hay consola).
+fn fatal(msg: &str, err: impl std::fmt::Display) -> ! {
+    logger::error(format!("{msg}: {err}"));
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("NowNotes")
+        .set_description(format!("{msg}.\n\n{err}"))
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
+    std::process::exit(1);
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -46,8 +86,9 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             "open" => windows::show_main(app),
             "quick" => windows::toggle_quick(app),
             "pause" => {
-                let st = app.state::<AppState>();
-                *st.paused_until.lock().unwrap() = db::now_ms() + 3_600_000;
+                let state = app.state::<AppState>();
+                *state.paused_until.lock().unwrap_or_else(|p| p.into_inner()) =
+                    db::now_ms() + db::HOUR_MS;
             }
             "quit" => {
                 windows::save_size(app);
@@ -98,9 +139,11 @@ fn migrate_autostart(app: &AppHandle) {
 
 fn main() {
     let loc = paths::resolve_current();
-    let migrated = paths::prepare(&loc).expect("No se pudo preparar la carpeta de datos");
-    let conn =
-        db::open(&loc.data_dir.join(paths::DB_FILE)).expect("No se pudo abrir la base de datos");
+    let migrated = paths::prepare(&loc)
+        .unwrap_or_else(|e| fatal("No se pudo preparar la carpeta de datos", e));
+    logger::init(&loc.data_dir);
+    let conn = db::open(&loc.data_dir.join(paths::DB_FILE))
+        .unwrap_or_else(|e| fatal("No se pudo abrir la base de datos", e));
     let start_minimized = std::env::args().any(|a| a == "--minimized");
 
     let app = tauri::Builder::default()
@@ -143,13 +186,9 @@ fn main() {
             windows::create_main(&handle, !start_minimized)?;
             build_tray(&handle)?;
             for (action, key) in commands::GLOBAL_ACTIONS {
-                let accel = {
-                    let st = handle.state::<AppState>();
-                    let c = st.db.lock().unwrap();
-                    db::get_setting(&c, key)
-                };
+                let accel = handle.state::<AppState>().setting(key);
                 if let Err(err) = commands::apply_shortcut(&handle, action, &accel) {
-                    eprintln!("{err}");
+                    logger::error(format!("Atajo global «{action}»: {err}"));
                 }
             }
             #[cfg(windows)]
@@ -165,11 +204,7 @@ fn main() {
                 match window.label() {
                     "main" => {
                         windows::save_size(window.app_handle());
-                        let to_tray = {
-                            let st = window.state::<AppState>();
-                            let c = st.db.lock().unwrap();
-                            db::get_setting(&c, "close_to_tray") != "0"
-                        };
+                        let to_tray = window.state::<AppState>().setting("close_to_tray") != "0";
                         if to_tray {
                             api.prevent_close();
                             let _ = window.hide();
@@ -219,7 +254,7 @@ fn main() {
             commands::open_backups_dir,
         ])
         .build(tauri::generate_context!())
-        .expect("Error al iniciar NowNotes");
+        .unwrap_or_else(|e| fatal("No se pudo iniciar NowNotes", e));
 
     app.run(|_app, event| {
         // Si se cierra la última ventana visible (p. ej. el aviso), la app sigue viva en la bandeja.

@@ -1,7 +1,7 @@
 {
   "name": "nownotes",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Notas y tareas rápidas para Windows, con recordatorios.",
   "license": "MIT",
   "author": "hujeanpaes",

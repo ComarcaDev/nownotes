@@ -2,6 +2,26 @@
 
 Todos los cambios relevantes de NowNotes (antes «Apunta») se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [2.0.1] - 2026-11-19
+
+### Cambiado
+- **Logo**: vuelve el diseño anterior (tarjeta con ✓), ahora con un discreto punto ámbar «ahora» en la esquina.
+
+### Corregido
+- Los errores al guardar ya no pasan desapercibidos: se muestra un aviso.
+- Guardados rápidos seguidos en el editor ya no pueden pisarse entre sí.
+- «Vaciar completadas» decía que se borraban; en realidad pasan a la papelera.
+- Cancelar «Archivo propio…» en Ajustes deja el sonido que había.
+- Los mensajes de Ajustes se limpian al hacer otra acción.
+- `Esc` en el menú de recordatorio ya no cierra también el editor.
+- Si la base de datos no se puede abrir al arrancar, se muestra un mensaje en lugar de cerrarse sin avisar.
+
+### Mejorado
+- Registro de errores en `nownotes.log` (carpeta de datos, con rotación).
+- Accesibilidad: etiquetas en botones de icono y campos, menús con roles, diálogo de Ajustes modal con el foco dentro.
+- Seguridad: permisos separados para las ventanas emergentes y CSP más estricta.
+- Limpieza interna: código duplicado unificado, iconos y archivos sin uso eliminados, más tests.
+
 ## [2.0.0] - 2026-11-19
 
 ### Cambiado
@@ -81,6 +101,7 @@ Primera versión estable.
 ### Distribución
 - Instalador NSIS para el usuario actual (sin permisos de administrador) y versión portable en .zip, que guarda los datos junto al ejecutable.
 
+[2.0.1]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.1
 [2.0.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.0
 [1.2.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.2.0
 [1.1.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.1.0

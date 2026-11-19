@@ -6,11 +6,14 @@ use std::path::{Path, PathBuf};
 use rusqlite::Connection;
 use serde::Serialize;
 
+/// Copias diarias que se conservan.
 pub const KEEP: usize = 7;
+/// Margen extra para las copias «antes de restaurar».
+const KEEP_WITH_SNAPSHOTS: usize = KEEP + 3;
 const PREFIX: &str = "nownotes-";
 const EXT: &str = ".db";
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupInfo {
     pub name: String,
@@ -30,7 +33,7 @@ fn is_backup_name(name: &str) -> bool {
 }
 
 /// Copia `c` en `target` (que no debe existir) de forma consistente.
-pub fn copy_to(c: &Connection, target: &Path) -> Result<(), String> {
+fn copy_to(c: &Connection, target: &Path) -> Result<(), String> {
     c.execute("VACUUM INTO ?1", [target.to_string_lossy()])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -58,7 +61,7 @@ pub fn snapshot(c: &Connection, data_dir: &Path, stamp: &str) -> Result<PathBuf,
         fs::remove_file(&target).map_err(|e| e.to_string())?;
     }
     copy_to(c, &target)?;
-    prune(&d, KEEP + 3);
+    prune(&d, KEEP_WITH_SNAPSHOTS);
     Ok(target)
 }
 
@@ -93,7 +96,7 @@ pub fn list(data_dir: &Path) -> Vec<BackupInfo> {
 }
 
 /// Borra las copias más antiguas dejando `keep`.
-pub fn prune(d: &Path, keep: usize) {
+fn prune(d: &Path, keep: usize) {
     let Ok(rd) = fs::read_dir(d) else { return };
     let mut names: Vec<String> = rd
         .filter_map(|e| e.ok())
@@ -103,7 +106,9 @@ pub fn prune(d: &Path, keep: usize) {
     names.sort();
     names.reverse(); // el nombre empieza por la fecha: orden descendente = más reciente primero
     for old in names.iter().skip(keep) {
-        let _ = fs::remove_file(d.join(old));
+        if let Err(e) = fs::remove_file(d.join(old)) {
+            crate::logger::error(format!("No se pudo borrar la copia antigua {old}: {e}"));
+        }
     }
 }
 

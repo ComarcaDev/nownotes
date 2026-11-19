@@ -10,7 +10,8 @@ use crate::recurrence;
 
 type R<T> = rusqlite::Result<T>;
 
-pub const DEFAULTS: &[(&str, &str)] = &[
+/// Valores por defecto de los ajustes (lo que no está guardado en `settings`).
+const DEFAULTS: &[(&str, &str)] = &[
     ("shortcut", "Ctrl+Alt+N"),
     ("sound", "chime"),
     ("sound_path", ""),
@@ -30,7 +31,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
 
 /// Días que un elemento permanece en la papelera antes de borrarse definitivamente.
 pub const TRASH_DAYS: i64 = 10;
-const DAY_MS: i64 = 86_400_000;
+pub const HOUR_MS: i64 = 3_600_000;
+pub const DAY_MS: i64 = 24 * HOUR_MS;
 
 const SCHEMA_V2: &str = "
 ALTER TABLE items ADD COLUMN deleted_at INTEGER;
@@ -149,7 +151,7 @@ pub struct Counts {
     pub trash: i64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Filter {
     pub view: String,
@@ -175,7 +177,7 @@ pub fn end_of_today_ms() -> i64 {
     let d = Local::now()
         .date_naive()
         .and_hms_milli_opt(23, 59, 59, 999)
-        .unwrap();
+        .expect("23:59:59.999 siempre es una hora válida");
     Local
         .from_local_datetime(&d)
         .earliest()
@@ -232,7 +234,7 @@ pub fn init(c: &Connection) -> R<()> {
 
 // ---------- ajustes ----------
 
-fn default_setting(key: &str) -> String {
+pub fn default_setting(key: &str) -> String {
     DEFAULTS
         .iter()
         .find(|(k, _)| *k == key)
@@ -339,10 +341,17 @@ fn set_tags(c: &Connection, id: i64, tags: &[String]) -> R<()> {
         )?;
         seen.push(name);
     }
-    c.execute(
-        "DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM item_tags)",
-        [],
-    )?;
+    drop_orphan_tags(c)
+}
+
+/// Añade a cada elemento sus etiquetas (una sola consulta para todos).
+fn attach_tags(c: &Connection, items: &mut [Item]) -> R<()> {
+    let tags = all_tags_map(c)?;
+    for it in items.iter_mut() {
+        if let Some(t) = tags.get(&it.id) {
+            it.tags = t.clone();
+        }
+    }
     Ok(())
 }
 
@@ -429,12 +438,7 @@ pub fn query_items(c: &Connection, f: &Filter, end_of_today: i64) -> R<Vec<Item>
     let mut items = st
         .query_map(params_from_iter(ps.iter()), map_item)?
         .collect::<R<Vec<Item>>>()?;
-    let tags = all_tags_map(c)?;
-    for it in items.iter_mut() {
-        if let Some(t) = tags.get(&it.id) {
-            it.tags = t.clone();
-        }
-    }
+    attach_tags(c, &mut items)?;
     Ok(items)
 }
 
@@ -761,12 +765,7 @@ pub fn export_all(c: &Connection) -> R<ExportData> {
     let sql = format!("SELECT {ITEM_COLS} FROM items WHERE {ALIVE} ORDER BY id");
     let mut st = c.prepare(&sql)?;
     let mut items = st.query_map([], map_item)?.collect::<R<Vec<Item>>>()?;
-    let tags = all_tags_map(c)?;
-    for it in items.iter_mut() {
-        if let Some(t) = tags.get(&it.id) {
-            it.tags = t.clone();
-        }
-    }
+    attach_tags(c, &mut items)?;
     Ok(ExportData {
         version: 1,
         lists: list_lists(c)?,
@@ -933,7 +932,7 @@ mod tests {
         let c = open_in_memory().unwrap();
         let eot = end_of_today_ms();
         let sod = start_of_day(eot);
-        assert!(sod < eot && eot - sod < DAY_MS + 3_600_000);
+        assert!(sod < eot && eot - sod < DAY_MS + HOUR_MS);
         let mut note = task("Idea de hoy", None, "none");
         note.kind = "note".into();
         let today = save_item(&c, &note, sod + 1_000).unwrap();
@@ -1007,13 +1006,13 @@ mod tests {
     #[test]
     fn repeating_reminder_advances() {
         let c = open_in_memory().unwrap();
-        let day = 86_400_000;
+        let day = DAY_MS;
         let start = 1_800_000_000_000; // ~2027
         let it = save_item(&c, &task("Pastilla", Some(start), "daily"), 1000).unwrap();
         assert_eq!(fire_due(&c, start + 1).unwrap(), vec![it.id]);
         let after = get_item(&c, it.id).unwrap().unwrap();
         let next = after.remind_at.unwrap();
-        assert!(next > start && next <= start + day + 3_600_000);
+        assert!(next > start && next <= start + day + HOUR_MS);
         assert!(fire_due(&c, start + 2).unwrap().is_empty());
     }
 

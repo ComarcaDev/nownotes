@@ -1,7 +1,10 @@
 <script lang="ts">
-  import { ask } from "@tauri-apps/plugin-dialog";
   import Icon from "./Icon.svelte";
   import { api, type Counts, type Filter, type List, type TagCount } from "../api";
+  import { confirmDanger } from "../confirm";
+  import { INBOX_ID } from "../items";
+  import { keys, display } from "../keys.svelte";
+  import { safe } from "../safe";
 
   let {
     lists,
@@ -37,8 +40,8 @@
     { view: "done", label: "Completadas", icon: "checkall" },
   ] as const;
 
-  const countFor = (v: string) =>
-    v === "today" ? counts.today : v === "upcoming" ? counts.upcoming : v === "tasks" ? counts.tasks : v === "notes" ? counts.notes : 0;
+  // «Completadas» no muestra contador: no es trabajo pendiente.
+  const countFor = (v: (typeof smart)[number]["view"]) => (v === "done" ? 0 : counts[v]);
 
   let adding = $state(false);
   let newName = $state("");
@@ -50,30 +53,29 @@
     adding = false;
     newName = "";
     if (!name) return;
-    const id = await api.saveList(null, name, COLORS[lists.length % COLORS.length]);
-    onselect({ view: "list", listId: id });
+    const id = await safe(() => api.saveList(null, name, COLORS[lists.length % COLORS.length]), "No se pudo crear la lista");
+    if (id != null) onselect({ view: "list", listId: id });
   }
 
   async function rename(l: List) {
     const name = editName.trim();
     editingId = null;
-    if (name && name !== l.name) await api.saveList(l.id, name, l.color);
+    if (name && name !== l.name) await safe(() => api.saveList(l.id, name, l.color), "No se pudo renombrar la lista");
   }
 
   async function cycleColor(l: List) {
     const next = COLORS[(COLORS.indexOf(l.color) + 1) % COLORS.length];
-    await api.saveList(l.id, l.name, next);
+    await safe(() => api.saveList(l.id, l.name, next), "No se pudo cambiar el color");
   }
 
   async function remove(l: List) {
-    const ok = await ask(`Los elementos de «${l.name}» pasarán a la Bandeja de entrada.`, {
-      title: "¿Eliminar la lista?",
-      kind: "warning",
-      okLabel: "Eliminar",
-      cancelLabel: "Cancelar",
-    });
+    const ok = await confirmDanger(
+      "¿Eliminar la lista?",
+      `Los elementos de «${l.name}» pasarán a la Bandeja de entrada.`,
+      "Eliminar"
+    );
     if (!ok) return;
-    await api.deleteList(l.id);
+    await safe(() => api.deleteList(l.id), "No se pudo eliminar la lista");
     if (filter.view === "list" && filter.listId === l.id) onselect({ view: "today" });
   }
 
@@ -87,8 +89,8 @@
   {#if !compact}
     <div class="search">
       <Icon name="search" size={14} />
-      <input type="search" placeholder="Buscar" bind:value={search} bind:this={searchEl} />
-      {#if !search}<kbd>Ctrl F</kbd>{/if}
+      <input type="search" placeholder="Buscar" aria-label="Buscar tareas y notas" bind:value={search} bind:this={searchEl} />
+      {#if !search && keys.app.search}<kbd>{display(keys.app.search).replaceAll("+", " ")}</kbd>{/if}
     </div>
   {/if}
 
@@ -99,6 +101,7 @@
         class="nav"
         class:active={filter.view === s.view && !search}
         title={compact ? s.label : undefined}
+        aria-label={compact ? s.label : undefined}
         onclick={() => onselect({ view: s.view })}
       >
         <Icon name={s.icon} />
@@ -110,7 +113,7 @@
 
   <div class="section">
     {#if !compact}<span>Listas</span>{/if}
-    <button class="icon-btn mini" title="Nueva lista" onclick={() => (adding = true)}><Icon name="plus" size={14} /></button>
+    <button class="icon-btn mini" title="Nueva lista" aria-label="Nueva lista" onclick={() => (adding = true)}><Icon name="plus" size={14} /></button>
   </div>
   <nav class="scroll">
     {#each lists as l (l.id)}
@@ -118,6 +121,7 @@
         {#if editingId === l.id && !compact}
           <input
             class="inline"
+            aria-label="Nombre de la lista"
             bind:value={editName}
             use:focus
             onkeydown={(e) => { if (e.key === "Enter") rename(l); if (e.key === "Escape") editingId = null; }}
@@ -127,11 +131,12 @@
           <button
             class="nav"
             class:active={filter.view === "list" && filter.listId === l.id && !search}
-            title={compact ? l.name : l.id !== 1 ? "Doble clic para renombrar" : undefined}
+            title={compact ? l.name : l.id !== INBOX_ID ? "Doble clic para renombrar" : undefined}
+            aria-label={compact ? l.name : undefined}
             onclick={() => onselect({ view: "list", listId: l.id })}
-            ondblclick={() => { if (l.id !== 1 && !compact) { editingId = l.id; editName = l.name; } }}
+            ondblclick={() => { if (l.id !== INBOX_ID && !compact) { editingId = l.id; editName = l.name; } }}
           >
-            {#if l.id === 1}
+            {#if l.id === INBOX_ID}
               <Icon name="inbox" />
             {:else}
               <span
@@ -145,8 +150,10 @@
             {#if !compact}<span class="label">{l.name}</span>{/if}
             {#if l.count > 0 && !compact}<span class="count">{l.count}</span>{/if}
           </button>
-          {#if l.id !== 1 && !compact}
-            <button class="icon-btn mini hover-only" title="Eliminar lista" onclick={() => remove(l)}><Icon name="trash" size={13} /></button>
+          {#if l.id !== INBOX_ID && !compact}
+            <button class="icon-btn mini hover-only" title="Eliminar lista" aria-label={`Eliminar la lista ${l.name}`} onclick={() => remove(l)}>
+              <Icon name="trash" size={13} />
+            </button>
           {/if}
         {/if}
       </div>
@@ -155,6 +162,7 @@
       <input
         class="inline"
         placeholder="Nombre de la lista"
+        aria-label="Nombre de la nueva lista"
         bind:value={newName}
         use:focus
         onkeydown={(e) => { if (e.key === "Enter") addList(); if (e.key === "Escape") { adding = false; newName = ""; } }}
@@ -179,19 +187,20 @@
       <button class="quick" title="Abrir la captura rápida" onclick={() => api.openQuick()}>
         <Icon name="edit" size={14} />
         <span class="label">Captura rápida</span>
-        <span class="keys">{#each shortcut.split("+") as k, i (i)}<kbd>{k}</kbd>{/each}</span>
+        <span class="keys">{#each display(shortcut).split("+") as k, i (i)}<kbd>{k}</kbd>{/each}</span>
       </button>
     {/if}
     <button
       class="nav"
       class:active={filter.view === "trash" && !search}
       title={compact ? "Papelera" : undefined}
+      aria-label={compact ? "Papelera" : undefined}
       onclick={() => onselect({ view: "trash" })}
     >
       <Icon name="trash" />{#if !compact}<span class="label">Papelera</span>{/if}
       {#if counts.trash > 0}<span class="count" class:badge={compact}>{counts.trash}</span>{/if}
     </button>
-    <button class="nav" title={compact ? "Ajustes" : undefined} onclick={onsettings}>
+    <button class="nav" title={compact ? "Ajustes" : undefined} aria-label={compact ? "Ajustes" : undefined} onclick={onsettings}>
       <Icon name="settings" />{#if !compact}<span class="label">Ajustes</span>{/if}
     </button>
   </div>

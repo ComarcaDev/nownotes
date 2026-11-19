@@ -1,13 +1,16 @@
 <script lang="ts">
-  import { ask } from "@tauri-apps/plugin-dialog";
   import Icon from "./Icon.svelte";
   import ItemRow from "./ItemRow.svelte";
   import NoteCard from "./NoteCard.svelte";
   import Composer from "./Composer.svelte";
+  import EmptyState from "./EmptyState.svelte";
   import { api, type Filter, type Item, type List } from "../api";
   import type { ItemActions } from "../actions";
   import { dayLabel, startOfDay } from "../dates";
   import { reorderable } from "../reorder";
+  import { confirmDanger } from "../confirm";
+  import { display } from "../keys.svelte";
+  import { safe } from "../safe";
 
   let {
     items,
@@ -95,10 +98,15 @@
   });
 
   const empty = $derived.by(() => {
-    const sc = shortcut || "Ctrl+Alt+N";
     if (searching) return { icon: "search", title: "Sin resultados", hint: "Prueba con otras palabras." };
     switch (filter.view) {
-      case "today": return { icon: "sun", title: "Nada pendiente para hoy", hint: `Escribe arriba o pulsa ${sc} desde cualquier programa.` };
+      case "today": {
+        // La pista solo menciona el atajo si existe (se puede quitar en Ajustes).
+        const hint = shortcut
+          ? `Escribe arriba o pulsa ${display(shortcut)} desde cualquier programa.`
+          : "Escribe arriba para añadir una tarea.";
+        return { icon: "sun", title: "Nada pendiente para hoy", hint };
+      }
       case "upcoming": return { icon: "calendar", title: "Nada programado", hint: "Las tareas con fecha o recordatorio futuros aparecerán aquí." };
       case "tasks": return { icon: "done", title: "Sin tareas pendientes", hint: "Las tareas son cosas por hacer: se marcan al terminarlas." };
       case "notes": return { icon: "note", title: "Aún no hay notas", hint: "Las notas guardan ideas, enlaces o textos largos con formato." };
@@ -108,13 +116,13 @@
   });
 
   async function clearDone() {
-    const ok = await ask(`Se borrarán definitivamente ${items.length} elementos completados.`, {
-      title: "¿Vaciar completadas?",
-      kind: "warning",
-      okLabel: "Vaciar",
-      cancelLabel: "Cancelar",
-    });
-    if (ok) await api.clearDone();
+    const n = items.length;
+    const ok = await confirmDanger(
+      "¿Vaciar completadas?",
+      `${n === 1 ? "El elemento completado se moverá" : `Los ${n} elementos completados se moverán`} a la papelera, donde podrás recuperarlos durante unos días.`,
+      "Vaciar"
+    );
+    if (ok) await safe(() => api.clearDone(), "No se pudieron vaciar las completadas");
   }
 </script>
 
@@ -169,11 +177,7 @@
     {/each}
 
     {#if items.length === 0}
-      <div class="empty">
-        <div class="empty-icon"><Icon name={empty.icon} size={34} /></div>
-        <div class="empty-title">{empty.title}</div>
-        <div class="faint">{empty.hint}</div>
-      </div>
+      <EmptyState icon={empty.icon} title={empty.title} hint={empty.hint} {compact} />
     {/if}
   </div>
 </div>
@@ -184,13 +188,5 @@
   .toolbar { display: flex; justify-content: flex-end; margin-bottom: 4px; }
   .rows { display: flex; flex-direction: column; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-bottom: 6px; }
-  .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 56px 24px; }
-  .empty-icon {
-    display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%;
-    background: var(--accent-soft); color: var(--accent); margin-bottom: 8px;
-  }
-  .empty-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
   .compact .list { padding: 0 12px 12px; }
-  .compact .empty { padding: 32px 16px; }
-  .compact .empty-icon { width: 56px; height: 56px; }
 </style>

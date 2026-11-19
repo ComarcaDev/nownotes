@@ -5,7 +5,7 @@ use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, Theme, WebviewUrl, WebviewWindowBuilder, Wry,
 };
 
-use crate::{db, AppState};
+use crate::{db, logger, AppState};
 
 // Todas las ventanas deben compartir los mismos argumentos de WebView2.
 // Los primeros son los que Tauri usa por defecto; el último permite reproducir el sonido del aviso sin interacción.
@@ -21,9 +21,7 @@ pub fn theme_from(value: &str) -> Option<Theme> {
 }
 
 fn current_theme(app: &AppHandle) -> Option<Theme> {
-    let st = app.state::<AppState>();
-    let c = st.db.lock().unwrap();
-    theme_from(&db::get_setting(&c, "theme"))
+    theme_from(&app.state::<AppState>().setting("theme"))
 }
 
 fn base<'a>(
@@ -55,14 +53,24 @@ fn min_for(mode: &str) -> (f64, f64) {
     }
 }
 
-/// "1040,700" → (1040.0, 700.0), respetando el mínimo del modo.
+/// "1040,700" → (1040.0, 700.0)
+fn parse_pair(value: &str) -> Option<(f64, f64)> {
+    let mut it = value.split(',').map(|v| v.trim().parse::<f64>().ok());
+    Some((it.next().flatten()?, it.next().flatten()?))
+}
+
+/// Tamaño guardado del modo; si no es válido, el predeterminado. Nunca menor que el mínimo.
 fn parse_size(value: &str, mode: &str) -> (f64, f64) {
     let min = min_for(mode);
-    let mut it = value.split(',').map(|v| v.trim().parse::<f64>().ok());
-    match (it.next().flatten(), it.next().flatten()) {
-        (Some(w), Some(h)) => (w.max(min.0), h.max(min.1)),
-        _ if mode == "mini" => (380.0, 560.0),
-        _ => (1040.0, 700.0),
+    let (w, h) = parse_pair(value)
+        .or_else(|| parse_pair(&db::default_setting(&format!("size_{mode}"))))
+        .unwrap_or(min);
+    (w.max(min.0), h.max(min.1))
+}
+
+fn store(app: &AppHandle, key: &str, value: &str) {
+    if let Err(e) = db::set_setting(&app.state::<AppState>().db(), key, value) {
+        logger::error(format!("No se pudo guardar «{key}»: {e}"));
     }
 }
 
@@ -78,11 +86,9 @@ pub fn save_size(app: &AppHandle) {
         return;
     };
     let logical = size.to_logical::<f64>(scale);
-    let st = app.state::<AppState>();
-    let c = st.db.lock().unwrap();
-    let mode = db::get_setting(&c, "ui_mode");
-    let _ = db::set_setting(
-        &c,
+    let mode = app.state::<AppState>().setting("ui_mode");
+    store(
+        app,
         &format!("size_{mode}"),
         &format!("{},{}", logical.width.round(), logical.height.round()),
     );
@@ -94,12 +100,11 @@ pub fn apply_mode(app: &AppHandle, mode: &str) -> tauri::Result<()> {
         return Ok(());
     };
     save_size(app);
-    let size = {
-        let st = app.state::<AppState>();
-        let c = st.db.lock().unwrap();
-        let _ = db::set_setting(&c, "ui_mode", mode);
-        parse_size(&db::get_setting(&c, &format!("size_{mode}")), mode)
-    };
+    store(app, "ui_mode", mode);
+    let size = parse_size(
+        &app.state::<AppState>().setting(&format!("size_{mode}")),
+        mode,
+    );
     if w.is_maximized()? {
         w.unmaximize()?;
     }
@@ -112,13 +117,10 @@ pub fn apply_mode(app: &AppHandle, mode: &str) -> tauri::Result<()> {
 /// Crea la ventana principal oculta; la interfaz la muestra al terminar de pintar.
 /// Si en 4 s no lo ha hecho (p. ej. error de carga), se muestra igualmente.
 pub fn create_main(app: &AppHandle, show: bool) -> tauri::Result<()> {
-    let (mode, size, on_top) = {
-        let st = app.state::<AppState>();
-        let c = st.db.lock().unwrap();
-        let mode = db::get_setting(&c, "ui_mode");
-        let size = parse_size(&db::get_setting(&c, &format!("size_{mode}")), &mode);
-        (mode, size, db::get_setting(&c, "always_on_top") == "1")
-    };
+    let state = app.state::<AppState>();
+    let mode = state.setting("ui_mode");
+    let size = parse_size(&state.setting(&format!("size_{mode}")), &mode);
+    let on_top = state.setting("always_on_top") == "1";
     let min = min_for(&mode);
     base(app, "main", "index.html")
         .title("NowNotes")
@@ -190,7 +192,7 @@ pub fn toggle_quick(app: &AppHandle) {
         .focused(true)
         .build();
     if let Err(e) = r {
-        eprintln!("No se pudo abrir la captura rápida: {e}");
+        logger::error(format!("No se pudo abrir la captura rápida: {e}"));
     }
 }
 
@@ -217,6 +219,6 @@ pub fn show_reminder(app: &AppHandle) {
         b = b.position(x, y);
     }
     if let Err(e) = b.build() {
-        eprintln!("No se pudo abrir el aviso: {e}");
+        logger::error(format!("No se pudo abrir el aviso: {e}"));
     }
 }

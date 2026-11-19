@@ -25,10 +25,12 @@ const RESERVED = new Set([
 ]);
 
 const appDefaults = () => Object.fromEntries(APP_ACTIONS.map((a) => [a.id, a.def])) as Record<AppAction, string>;
+const globalDefaults = () =>
+  Object.fromEntries(GLOBAL_ACTIONS.map((g) => [g.id, g.def])) as Record<GlobalAction, string>;
 
 export const keys = $state({
   app: appDefaults(),
-  global: { quick: "Ctrl+Alt+N", toggle: "Ctrl+Alt+A" } as Record<GlobalAction, string>,
+  global: globalDefaults(),
 });
 
 function parseAppKeys(json: string | undefined): Record<AppAction, string> {

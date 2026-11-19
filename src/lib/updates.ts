@@ -1,8 +1,9 @@
 // Comprobación de nuevas versiones en GitHub (sin descargar nada: solo se avisa).
 
+import { DAY_MS } from "./dates";
+
 export const REPO = "hujeanpaes/nownotes";
 const LAST_CHECK_KEY = "nownotes.lastUpdateCheck";
-const DAY = 86_400_000;
 
 export interface UpdateInfo { version: string; url: string }
 
@@ -36,7 +37,7 @@ export async function checkForUpdate(current: string): Promise<UpdateInfo | null
 export function dueForCheck(): boolean {
   try {
     const last = Number(localStorage.getItem(LAST_CHECK_KEY) || 0);
-    return Date.now() - last > DAY;
+    return Date.now() - last > DAY_MS;
   } catch {
     return true;
   }

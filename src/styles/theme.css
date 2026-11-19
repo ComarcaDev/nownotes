@@ -172,9 +172,8 @@ select option { background: var(--solid); color: var(--text); }
 }
 .segmented button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
 
-.muted { color: var(--text-2); }
 .faint { color: var(--text-3); }
-.overdue { color: var(--danger); }
+.grow { flex: 1; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
@@ -224,7 +223,6 @@ kbd {
   padding: 14px 2px 6px;
 }
 .section-title.danger { color: var(--danger); }
-.section-title .grow { flex: 1; }
 
 @keyframes pop {
   0% { transform: scale(1); }
@@ -251,3 +249,20 @@ kbd {
   box-shadow: var(--shadow);
   padding: 4px;
 }
+
+/* Elementos de menú (menú contextual, «⋯» del editor, recordatorio rápido) */
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: default;
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--hover); }
+.menu-item.current { color: var(--accent); }
+.menu-item.danger { color: var(--danger); }

@@ -2364,9 +2364,10 @@ dependencies = [
 
 [[package]]
 name = "nownotes"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "chrono",
+ "rfd",
  "rusqlite",
  "serde",
  "serde_json",

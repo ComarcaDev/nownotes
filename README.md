@@ -90,16 +90,27 @@ src/                   Interfaz (Svelte 5 + TypeScript)
   main/                Ventana principal
   quick/               Ventana de captura rápida
   reminder/            Ventana de aviso
-  lib/                 Componentes, API, fechas, lenguaje natural, atajos, Markdown
+  lib/
+    api.ts             Llamadas al backend (comandos de Tauri)
+    items.ts           Utilidades de tareas y notas
+    dates.ts, nlp.ts   Fechas y fechas en lenguaje natural
+    keys.svelte.ts     Atajos configurables
+    markdown.ts        Markdown mínimo y seguro
+    components/        Componentes de la interfaz
 src-tauri/src/         Backend (Rust + Tauri 2)
+  main.rs              Arranque, bandeja y atajos globales
+  commands.rs          Comandos que usa la interfaz
   db.rs                SQLite: esquema, migraciones, CRUD y avisos
   backup.rs            Copias de seguridad diarias y restauración
   scheduler.rs         Recordatorios cada 15 s y mantenimiento horario
   recurrence.rs        Cálculo de repeticiones
   windows.rs           Ventanas (Mica, modos y anclado)
   paths.rs             Modo portable o instalado y migración desde «Apunta»
+  logger.rs            Registro de errores en nownotes.log
 scripts/               Empaquetado del zip portable
 ```
+
+Si algo falla, los errores quedan en `nownotes.log`, dentro de la carpeta de datos (se ve en Ajustes → Datos).
 
 ## Licencia
 

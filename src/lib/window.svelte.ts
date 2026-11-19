@@ -14,7 +14,11 @@ export const win = $state({
 export const isDark = () =>
   win.theme === "dark" || (win.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
 
+let started = false;
+
 export async function initWindowState() {
+  if (started) return; // un solo listener aunque se llame dos veces
+  started = true;
   const s = await api.settings();
   win.theme = s.theme || "dark";
   win.mode = s.ui_mode === "mini" ? "mini" : "full";

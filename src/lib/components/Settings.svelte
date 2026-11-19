@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-  import { ask, open, save } from "@tauri-apps/plugin-dialog";
+  import { open, save } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import Icon from "./Icon.svelte";
   import ShortcutsSettings from "./ShortcutsSettings.svelte";
   import { api, type BackupInfo, type Info, type Settings } from "../api";
-  import { SOUNDS, playSound } from "../sound";
+  import { SOUNDS, playSound, parseVolume } from "../sound";
   import { checkForUpdate, type UpdateInfo } from "../updates";
+  import { confirmDanger } from "../confirm";
+  import { getInfo } from "../info";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -19,25 +21,36 @@
   let error = $state("");
   let checking = $state(false);
   let update = $state<UpdateInfo | null | undefined>(undefined);
+  let closeBtn = $state<HTMLButtonElement>();
 
-  onMount(async () => {
-    s = await api.settings();
-    info = await api.info();
-    backups = await api.listBackups();
-    try { autostart = await isEnabled(); } catch { autostart = false; }
+  onMount(() => {
+    closeBtn?.focus(); // el foco entra en el diálogo
+    // Cada carga es independiente: si una falla, las demás siguen.
+    api.settings().then((v) => (s = v)).catch((e) => (error = String(e)));
+    getInfo().then((v) => (info = v)).catch(() => {});
+    api.listBackups().then((v) => (backups = v)).catch(() => {});
+    isEnabled().then((v) => (autostart = v)).catch(() => (autostart = false));
   });
 
-  async function setKey(key: string, value: string) {
+  function clearMessages() {
     error = "";
+    message = "";
+  }
+
+  async function setKey(key: string, value: string): Promise<boolean> {
+    clearMessages();
     try {
       await api.setSetting(key, value);
       s[key] = value;
+      return true;
     } catch (e) {
       error = String(e);
+      return false;
     }
   }
 
   async function toggleAutostart() {
+    clearMessages();
     try {
       if (autostart) await disable(); else await enable();
       autostart = await isEnabled();
@@ -46,15 +59,24 @@
     }
   }
 
-  async function pickSound() {
+  /** Elige un archivo de sonido. Devuelve false si se canceló. */
+  async function pickSound(): Promise<boolean> {
     const path = await open({ multiple: false, filters: [{ name: "Audio", extensions: ["wav", "mp3", "ogg"] }] });
-    if (typeof path === "string") {
-      await setKey("sound_path", path);
-      await setKey("sound", "custom");
+    if (typeof path !== "string") return false;
+    return (await setKey("sound_path", path)) && (await setKey("sound", "custom"));
+  }
+
+  async function onSoundChange(sel: HTMLSelectElement) {
+    const v = sel.value;
+    if (v === "custom" && !s.sound_path) {
+      if (!(await pickSound())) sel.value = s.sound; // cancelado: vuelve a la opción anterior
+    } else {
+      await setKey("sound", v);
     }
   }
 
   async function doExport() {
+    clearMessages();
     const date = new Date().toISOString().slice(0, 10);
     const path = await save({ defaultPath: `nownotes-${date}.json`, filters: [{ name: "JSON", extensions: ["json"] }] });
     if (!path) return;
@@ -62,6 +84,7 @@
   }
 
   async function doImport() {
+    clearMessages();
     const path = await open({ multiple: false, filters: [{ name: "JSON", extensions: ["json"] }] });
     if (typeof path !== "string") return;
     try { const n = await api.importData(path); message = `Importados ${n} elementos.`; } catch (e) { error = String(e); }
@@ -74,11 +97,13 @@
   }
 
   async function restore(b: BackupInfo) {
-    const ok = await ask(
+    const ok = await confirmDanger(
+      "¿Restaurar esta copia?",
       `Los datos actuales se sustituirán por los de la copia del ${backupLabel(b)}. Antes se guarda una copia del estado actual, por si quieres volver.`,
-      { title: "¿Restaurar esta copia?", kind: "warning", okLabel: "Restaurar", cancelLabel: "Cancelar" }
+      "Restaurar"
     );
     if (!ok) return;
+    clearMessages();
     try {
       await api.restoreBackup(b.name);
       location.reload(); // recarga la interfaz con los datos restaurados
@@ -89,7 +114,7 @@
 
   async function checkNow() {
     checking = true;
-    error = "";
+    clearMessages();
     try {
       update = await checkForUpdate(info?.version ?? "0.0.0");
     } catch {
@@ -103,10 +128,10 @@
 <svelte:window onkeydown={(e) => { if (e.key === "Escape") onclose(); }} />
 
 <div class="backdrop" role="presentation" onclick={(e) => { if (e.target === e.currentTarget) onclose(); }}>
-  <div class="dialog" role="dialog" aria-label="Ajustes">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <header>
-      <h2>Ajustes</h2>
-      <button class="icon-btn" title="Cerrar" onclick={onclose}><Icon name="x" /></button>
+      <h2 id="settings-title">Ajustes</h2>
+      <button class="icon-btn" title="Cerrar (Esc)" aria-label="Cerrar ajustes" bind:this={closeBtn} onclick={onclose}><Icon name="x" /></button>
     </header>
 
     <div class="content">
@@ -117,10 +142,12 @@
         <div class="row">
           <div>Sonido</div>
           <div class="ctl">
-            <select value={s.sound} onchange={(e) => { const v = e.currentTarget.value; if (v === "custom" && !s.sound_path) pickSound(); else setKey("sound", v); }}>
+            <select aria-label="Sonido del aviso" value={s.sound} onchange={(e) => onSoundChange(e.currentTarget)}>
               {#each SOUNDS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
             </select>
-            <button class="icon-btn" title="Probar" onclick={() => playSound(s.sound, parseFloat(s.volume), s.sound_path)}><Icon name="play" /></button>
+            <button class="icon-btn" title="Probar" aria-label="Probar sonido" onclick={() => playSound(s.sound, parseVolume(s.volume), s.sound_path)}>
+              <Icon name="play" />
+            </button>
           </div>
         </div>
         {#if s.sound === "custom"}
@@ -131,7 +158,7 @@
         {/if}
         <div class="row">
           <div>Volumen</div>
-          <input type="range" min="0" max="1" step="0.05" value={s.volume} onchange={(e) => setKey("volume", e.currentTarget.value)} />
+          <input type="range" min="0" max="1" step="0.05" aria-label="Volumen" value={parseVolume(s.volume)} onchange={(e) => setKey("volume", e.currentTarget.value)} />
         </div>
         <label class="row">
           <div><div>Notificación de Windows</div><div class="faint small">Además de la ventana de aviso, enviar una notificación al centro de actividades.</div></div>
@@ -185,7 +212,7 @@
           <button class="btn subtle" onclick={() => api.openBackupsDir()}><Icon name="list" size={13} />Abrir carpeta</button>
         </div>
         {#if backups.length === 0}
-          <div class="faint small empty">Se crea una copia al día; se conservan las últimas 7.</div>
+          <div class="faint small empty">Se crea una copia al día; se conservan las últimas {info?.backupKeep ?? 7}.</div>
         {:else}
           {#each backups as b (b.name)}
             <div class="row slim">

@@ -42,7 +42,15 @@ export interface TagCount { name: string; count: number }
 export interface Counts { today: number; upcoming: number; tasks: number; notes: number; done: number; trash: number }
 export interface Filter { view: View; listId?: number | null; tag?: string | null; search?: string | null }
 export type Settings = Record<string, string>;
-export interface Info { dataDir: string; portable: boolean; version: string }
+export interface Info {
+  dataDir: string;
+  portable: boolean;
+  version: string;
+  /** Días que se conserva un elemento en la papelera. */
+  trashDays: number;
+  /** Copias de seguridad diarias que se conservan. */
+  backupKeep: number;
+}
 export interface BackupInfo { name: string; modified: number; size: number }
 
 export const api = {

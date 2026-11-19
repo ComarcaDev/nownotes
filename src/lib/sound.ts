@@ -38,21 +38,39 @@ function synth(kind: string, volume: number) {
   }
 }
 
-let current: HTMLAudioElement | null = null;
+/** Volumen si el ajuste falta o no es un número (igual que el valor por defecto del backend). */
+export const DEFAULT_VOLUME = 0.7;
+
+export function parseVolume(v: string | undefined): number {
+  const n = parseFloat(v ?? "");
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : DEFAULT_VOLUME;
+}
+
+let current: { audio: HTMLAudioElement; url: string } | null = null;
+
+/** Detiene el sonido propio que esté sonando y libera su memoria. */
+function stopCurrent() {
+  if (!current) return;
+  current.audio.pause();
+  URL.revokeObjectURL(current.url);
+  current = null;
+}
 
 export async function playSound(kind: string, volume: number, customPath = ""): Promise<void> {
   if (kind === "none") return;
   if (kind === "custom" && customPath) {
     try {
       const buf = await api.readFileBytes(customPath);
+      stopCurrent();
       const url = URL.createObjectURL(new Blob([buf]));
-      current?.pause();
-      current = new Audio(url);
-      current.volume = Math.max(0, Math.min(1, volume));
-      current.onended = () => URL.revokeObjectURL(url);
-      await current.play();
+      const audio = new Audio(url);
+      current = { audio, url };
+      audio.volume = Math.max(0, Math.min(1, volume));
+      audio.onended = stopCurrent;
+      await audio.play();
       return;
     } catch (e) {
+      stopCurrent();
       console.warn("No se pudo reproducir el sonido propio, se usa el predeterminado", e);
     }
   }
@@ -61,5 +79,5 @@ export async function playSound(kind: string, volume: number, customPath = ""): 
 
 export async function playConfigured(): Promise<void> {
   const s = await api.settings();
-  await playSound(s.sound, parseFloat(s.volume || "0.7"), s.sound_path);
+  await playSound(s.sound, parseVolume(s.volume), s.sound_path);
 }

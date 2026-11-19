@@ -3,25 +3,29 @@
   import { fade } from "svelte/transition";
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { api, type Counts, type Filter, type Item, type ItemInput, type List, type TagCount } from "../lib/api";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { api, type Counts, type Filter, type Item, type List, type TagCount } from "../lib/api";
   import type { ItemActions, MenuAction } from "../lib/actions";
   import { showToast } from "../lib/toast.svelte";
   import { fmt } from "../lib/dates";
+  import { quoted, toInput } from "../lib/items";
+  import { toggleCheckLine } from "../lib/markdown";
+  import { safe } from "../lib/safe";
+  import { getInfo } from "../lib/info";
+  import { win, initWindowState, toggleTheme, toggleMode, toggleOnTop } from "../lib/window.svelte";
+  import { keys, initKeys, matches, display } from "../lib/keys.svelte";
+  import { checkForUpdate, dueForCheck } from "../lib/updates";
   import Sidebar from "../lib/components/Sidebar.svelte";
   import ItemList from "../lib/components/ItemList.svelte";
   import Editor from "../lib/components/Editor.svelte";
   import Toast from "../lib/components/Toast.svelte";
   import Icon from "../lib/components/Icon.svelte";
   import WindowToolbar from "../lib/components/WindowToolbar.svelte";
-  import { toggleCheckLine } from "../lib/markdown";
+
   // Carga diferida: solo se descargan al usarse (menos JS al arrancar).
   const loadSettings = () => import("../lib/components/Settings.svelte");
   const loadContextMenu = () => import("../lib/components/ContextMenu.svelte");
   const loadTrash = () => import("../lib/components/TrashList.svelte");
-  import { win, initWindowState, toggleTheme, toggleMode, toggleOnTop } from "../lib/window.svelte";
-  import { keys, initKeys, matches, display } from "../lib/keys.svelte";
-  import { checkForUpdate, dueForCheck } from "../lib/updates";
-  import { openUrl } from "@tauri-apps/plugin-opener";
 
   let filter = $state<Filter>({ view: "today" });
   let searchText = $state("");
@@ -81,14 +85,18 @@
   async function reload() {
     const my = ++seq;
     const f: Filter = { ...$state.snapshot(filter), search: search.trim() || null };
-    const [it, ls, tg, ct] = await Promise.all([api.queryItems(f), api.lists(), api.tags(), api.counts()]);
-    if (my !== seq) return;
+    const loaded = await safe(
+      () => Promise.all([api.queryItems(f), api.lists(), api.tags(), api.counts()]),
+      "No se pudieron cargar los datos"
+    );
+    if (!loaded || my !== seq) return;
+    const [it, ls, tg, ct] = loaded;
     items = it;
     lists = ls;
     tags = tg;
     counts = ct;
     if (selectedId != null) {
-      const found = it.find((i) => i.id === selectedId) ?? (await api.getItem(selectedId));
+      const found = it.find((i) => i.id === selectedId) ?? (await api.getItem(selectedId).catch(() => null));
       if (found) selectedItem = found;
       else closeEditor();
     }
@@ -141,41 +149,37 @@
   }
 
   // ---------- acciones ----------
-  const toInput = (it: Item, patch: Partial<ItemInput> = {}): ItemInput => ({
-    id: it.id, kind: it.kind, title: it.title, body: it.body, listId: it.listId, dueAt: it.dueAt,
-    remindAt: it.remindAt, recur: it.recur, pinned: it.pinned, tags: it.tags, ...patch,
-  });
-  const name = (it: Item) => `«${(it.title || "Sin título").slice(0, 40)}»`;
-
+  // Todas pasan por `safe`: si algo falla, se avisa con un toast en lugar de fallar en silencio.
   const actions: ItemActions = {
     select,
     async toggle(it) {
-      const updated = await api.toggleDone(it.id);
-      if (it.done) return;
+      const updated = await safe(() => api.toggleDone(it.id));
+      if (!updated || it.done) return;
       if (it.recur !== "none" && !updated.done) {
         const next = updated.dueAt ?? updated.remindAt;
         showToast(next ? `Hecha. Siguiente: ${fmt(next, updated.remindAt != null)}` : "Hecha", {
           label: "Deshacer",
-          run: () => api.saveItem(toInput(it)),
+          run: () => safe(() => api.saveItem(toInput(it))),
         });
       } else {
-        showToast(`${name(it)} completada`, { label: "Deshacer", run: () => api.toggleDone(it.id) });
+        showToast(`${quoted(it)} completada`, { label: "Deshacer", run: () => safe(() => api.toggleDone(it.id)) });
       }
     },
     async remove(it) {
-      await api.deleteItem(it.id);
+      const ok = await safe(() => api.deleteItem(it.id).then(() => true), "No se pudo mover a la papelera");
+      if (!ok) return;
       if (selectedId === it.id) closeEditor();
-      showToast(`${name(it)} movida a la papelera`, {
+      showToast(`${quoted(it)} movida a la papelera`, {
         label: "Deshacer",
-        run: () => api.restoreItem(it.id),
+        run: () => safe(() => api.restoreItem(it.id)),
       });
     },
     async pin(it) {
-      await api.saveItem(toInput(it, { pinned: !it.pinned }));
+      await safe(() => api.saveItem(toInput(it, { pinned: !it.pinned })));
     },
     async setReminder(it, at) {
-      await api.saveItem(toInput(it, { remindAt: at }));
-      if (at != null) showToast(`Te avisaré ${fmt(at).toLowerCase()}`);
+      const saved = await safe(() => api.saveItem(toInput(it, { remindAt: at })));
+      if (saved && at != null) showToast(`Te avisaré ${fmt(at).toLowerCase()}`);
     },
     menu(e, it) {
       e.preventDefault();
@@ -183,15 +187,16 @@
       menu = { x: e.clientX, y: e.clientY, item: it };
     },
     async toggleCheck(it, line) {
-      await api.saveItem(toInput(it, { body: toggleCheckLine(it.body, line) }));
+      await safe(() => api.saveItem(toInput(it, { body: toggleCheckLine(it.body, line) })));
     },
     async reorder(ids) {
-      // Orden optimista: se aplica ya en pantalla y luego se guarda.
+      // Orden optimista: se aplica ya en pantalla y luego se guarda (si falla, la recarga lo deshace).
       const pos = new Map(ids.map((id, i) => [id, i]));
       const moved = items.filter((i) => pos.has(i.id)).sort((a, b) => pos.get(a.id)! - pos.get(b.id)!);
       let k = 0;
       items = items.map((i) => (pos.has(i.id) ? moved[k++] : i));
-      await api.reorderItems(ids);
+      const ok = await safe(() => api.reorderItems(ids).then(() => true), "No se pudo guardar el orden");
+      if (!ok) reload();
     },
   };
 
@@ -204,19 +209,19 @@
     else if (a === "remove") actions.remove(it);
     else if (a === "convert") {
       const kind = it.kind === "task" ? "note" : "task";
-      await api.saveItem(toInput(it, { kind, dueAt: kind === "note" ? null : it.dueAt }));
-      showToast(`Convertida en ${kind === "note" ? "nota" : "tarea"}`);
+      const saved = await safe(() => api.saveItem(toInput(it, { kind, dueAt: kind === "note" ? null : it.dueAt })));
+      if (saved) showToast(`Convertida en ${kind === "note" ? "nota" : "tarea"}`);
     } else if (typeof a === "object") {
-      await api.saveItem(toInput(it, { listId: a.move }));
-      showToast(`Movida a «${lists.find((l) => l.id === a.move)?.name}»`);
+      const saved = await safe(() => api.saveItem(toInput(it, { listId: a.move })));
+      if (saved) showToast(`Movida a «${lists.find((l) => l.id === a.move)?.name}»`);
     }
   }
 
-  // ---------- teclado ----------
+  // ---------- actualizaciones ----------
   /** Aviso discreto de versión nueva (como mucho una vez al día, si está activado). */
   async function notifyUpdate() {
     try {
-      const [s, info] = await Promise.all([api.settings(), api.info()]);
+      const [s, info] = await Promise.all([api.settings(), getInfo()]);
       if (s.update_check === "0" || !dueForCheck()) return;
       const up = await checkForUpdate(info.version);
       if (up) {
@@ -227,6 +232,7 @@
     }
   }
 
+  // ---------- teclado ----------
   function isTyping(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     return t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable;
@@ -270,16 +276,17 @@
 
   onMount(() => {
     const unItems = listen("items-changed", scheduleReload);
-    initWindowState();
-    initKeys();
+    initWindowState().catch((e) => console.error("Estado de la ventana", e));
+    initKeys().catch((e) => console.error("Atajos", e));
     // Se muestra la ventana cuando ya está pintada (sin parpadeo blanco).
     (async () => {
       await reload();
-      if (!(await api.startupMinimized())) {
+      const minimized = await api.startupMinimized().catch(() => false);
+      if (!minimized) {
         requestAnimationFrame(async () => {
-          const win = getCurrentWindow();
-          await win.show();
-          await win.setFocus();
+          const appWindow = getCurrentWindow();
+          await appWindow.show();
+          await appWindow.setFocus();
         });
       }
       notifyUpdate();

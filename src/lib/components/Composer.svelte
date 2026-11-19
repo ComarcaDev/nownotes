@@ -4,9 +4,12 @@
   import { slide } from "svelte/transition";
   import Icon from "./Icon.svelte";
   import ReminderPicker from "./ReminderPicker.svelte";
+  import DetectedDate from "./DetectedDate.svelte";
   import { api, type Filter, type Item, type Kind } from "../api";
-  import { at, startOfDay, toDateInput, fromInput, dayLabel, fmt } from "../dates";
+  import { at, startOfDay, toDateInput, fromInput, dayLabel } from "../dates";
   import { parseDate } from "../nlp";
+  import { INBOX_ID } from "../items";
+  import { safe } from "../safe";
 
   let {
     filter,
@@ -76,7 +79,6 @@
   // Fechas en lenguaje natural: «comprar pan mañana 18:00».
   let nlpOff = $state(false);
   const parsed = $derived(nlpOff || !text.trim() ? null : parseDate(text));
-  const parsedLabel = $derived(parsed ? (parsed.remindAt ? fmt(parsed.remindAt) : dayLabel(parsed.dueAt)) : "");
 
   const expanded = $derived(focused || text.trim() !== "" || remindAt != null);
   const canSubmit = $derived(text.trim() !== "");
@@ -95,17 +97,22 @@
     busy = true;
     const p = parsed;
     try {
-      const it = await api.saveItem({
-        kind,
-        title: p && p.title ? p.title : t,
-        body: "",
-        listId: filter.view === "list" ? (filter.listId ?? 1) : 1,
-        dueAt: kind === "task" ? (p ? p.dueAt : dueAt) : null,
-        remindAt: remindAt ?? p?.remindAt ?? null,
-        recur: "none",
-        pinned: false,
-        tags: filter.view === "tag" && filter.tag ? [filter.tag] : [],
-      });
+      const it = await safe(
+        () =>
+          api.saveItem({
+            kind,
+            title: p && p.title ? p.title : t,
+            body: "",
+            listId: filter.view === "list" ? (filter.listId ?? INBOX_ID) : INBOX_ID,
+            dueAt: kind === "task" ? (p ? p.dueAt : dueAt) : null,
+            remindAt: remindAt ?? p?.remindAt ?? null,
+            recur: "none",
+            pinned: false,
+            tags: filter.view === "tag" && filter.tag ? [filter.tag] : [],
+          }),
+        kind === "note" ? "No se pudo crear la nota" : "No se pudo crear la tarea"
+      );
+      if (!it) return; // se conserva el texto para reintentar
       reset();
       input?.focus();
       oncreated(it);
@@ -125,7 +132,13 @@
 
 <div class="composer" class:expanded class:compact role="group" onfocusin={() => (focused = true)} onfocusout={onFocusOut}>
   <div class="line">
-    <button class="plus" class:note={kind === "note"} title="Crear" onclick={() => (canSubmit ? create() : input?.focus())}>
+    <button
+      class="plus"
+      class:note={kind === "note"}
+      title="Crear"
+      aria-label={kind === "note" ? "Crear nota" : "Crear tarea"}
+      onclick={() => (canSubmit ? create() : input?.focus())}
+    >
       <Icon name={kind === "note" ? "note" : "plus"} size={15} />
     </button>
     <input
@@ -133,6 +146,7 @@
       bind:this={input}
       bind:value={text}
       {placeholder}
+      aria-label={kind === "note" ? "Nueva nota" : "Nueva tarea"}
       onkeydown={(e) => {
         if (e.key === "Enter") { e.preventDefault(); create(); }
         if (e.key === "Escape") { reset(); e.currentTarget.blur(); }
@@ -149,6 +163,7 @@
           aria-checked={chosenKind === "task"}
           class:active={chosenKind === "task"}
           title="Crear tarea  (Tab para cambiar)"
+          aria-label="Tarea"
           onclick={() => setKind("task")}
         >
           {#if compact}<Icon name="tasks" size={14} />{:else}Tarea{/if}
@@ -158,6 +173,7 @@
           aria-checked={chosenKind === "note"}
           class:active={chosenKind === "note"}
           title="Crear nota  (Tab para cambiar)"
+          aria-label="Nota"
           onclick={() => setKind("note")}
         >
           {#if compact}<Icon name="note" size={14} />{:else}Nota{/if}
@@ -172,13 +188,7 @@
   {#if expanded}
     <div class="extras" transition:slide={{ duration: 140 }}>
       {#if parsed}
-        <span class="detected" title={`Detectado: «${parsed.matches.join(" ")}»`}>
-          <Icon name={parsed.remindAt ? "bell" : "calendar"} size={12} />
-          {parsedLabel}
-          <button class="undo" title="No usar esta fecha" aria-label="Descartar fecha detectada" onclick={() => { nlpOff = true; input?.focus(); }}>
-            <Icon name="x" size={11} />
-          </button>
-        </span>
+        <DetectedDate {parsed} ondismiss={() => { nlpOff = true; input?.focus(); }} />
         <span class="sep"></span>
       {/if}
       {#if kind === "task" && !parsed}
@@ -193,7 +203,7 @@
             <Icon name="calendar" size={12} />
             {dueAt != null && dueAt !== today() && dueAt !== tomorrow() ? dayLabel(dueAt) : "Fecha…"}
           </button>
-          <input bind:this={dateEl} type="date" tabindex="-1" value={toDateInput(dueAt)} onchange={(e) => (dueAt = fromInput(e.currentTarget.value))} />
+          <input bind:this={dateEl} type="date" tabindex="-1" aria-hidden="true" value={toDateInput(dueAt)} onchange={(e) => (dueAt = fromInput(e.currentTarget.value))} />
         </span>
         <span class="sep"></span>
       {/if}
@@ -243,15 +253,6 @@
   .compact .extras { padding-left: 12px; }
   .kind.icons button { display: grid; place-items: center; padding: 3px 7px; }
   .sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; }
-  .detected {
-    display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px 2px 9px; border-radius: 999px;
-    font-size: 12px; background: var(--accent); color: var(--accent-text);
-  }
-  .undo {
-    display: grid; place-items: center; width: 18px; height: 18px; border: none; border-radius: 50%;
-    background: transparent; color: inherit; cursor: default; padding: 0;
-  }
-  .undo:hover { background: color-mix(in srgb, var(--accent-text) 20%, transparent); }
   .hint { font-size: 11.5px; }
   .date { position: relative; display: inline-flex; }
   .date input { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; padding: 0; border: 0; }

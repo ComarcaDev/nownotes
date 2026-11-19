@@ -6,6 +6,8 @@
   import { api, type Item, type Kind, type List, type Recur } from "../api";
   import { fmt, fromInput, toDateInput, RECUR_LABEL } from "../dates";
   import { renderMarkdown, toggleCheckLine, checkLineFromEvent } from "../markdown";
+  import { parseTags } from "../items";
+  import { safe } from "../safe";
 
   let {
     item,
@@ -39,6 +41,8 @@
   let version = 0;
   let savedVersion = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Los guardados se encadenan: uno no empieza hasta que termina el anterior.
+  let queue: Promise<void> = Promise.resolve();
   // svelte-ignore state_referenced_locally
   let preview = $state(item.kind === "note" && item.body.trim() !== "");
 
@@ -57,24 +61,32 @@
     timer = setTimeout(save, 400);
   }
 
-  async function save() {
-    clearTimeout(timer);
+  async function persist() {
     if (version === savedVersion) return;
     const v = version;
-    const saved = await api.saveItem({
-      id: item.id,
-      kind: d.kind,
-      title: d.title,
-      body: d.body,
-      listId: d.listId,
-      dueAt: d.dueAt,
-      remindAt: d.remindAt,
-      recur: d.recur,
-      pinned: d.pinned,
-      tags: d.tagsText.split(",").map((t) => t.trim().replace(/^#/, "")).filter(Boolean),
-    });
+    const saved = await safe(() =>
+      api.saveItem({
+        id: item.id,
+        kind: d.kind,
+        title: d.title,
+        body: d.body,
+        listId: d.listId,
+        dueAt: d.dueAt,
+        remindAt: d.remindAt,
+        recur: d.recur,
+        pinned: d.pinned,
+        tags: parseTags(d.tagsText),
+      })
+    );
+    if (!saved) return; // el toast ya avisó; se reintentará con el siguiente cambio
     lastSeen = saved.updatedAt;
     savedVersion = v;
+  }
+
+  function save(): Promise<void> {
+    clearTimeout(timer);
+    queue = queue.then(persist);
+    return queue;
   }
 
   onDestroy(() => { save(); });
@@ -87,7 +99,7 @@
   async function remove() {
     menuOpen = false;
     await save(); // se guarda lo último para que «Deshacer» lo recupere completo
-    onremove({ ...item, ...d, tags: d.tagsText.split(",").map((t) => t.trim()).filter(Boolean) });
+    onremove({ ...item, ...d, tags: parseTags(d.tagsText) });
   }
 
   function convert() {
@@ -102,7 +114,7 @@
     changed();
   }
 
-  function clickLinks(e: MouseEvent) {
+  function clickPreview(e: MouseEvent) {
     // Casilla «- [ ]»: se marca sin salir de la vista previa.
     const line = checkLineFromEvent(e);
     if (line !== null) {
@@ -126,32 +138,47 @@
 
 <svelte:window onmousedown={() => (menuOpen = false)} />
 
-<section class="editor" class:compact>
+<section class="editor" class:compact aria-label="Editor">
   <header>
     {#if compact}
-      <button class="icon-btn" title="Volver (Esc)" onclick={onclose}><Icon name="back" /></button>
+      <button class="icon-btn" title="Volver (Esc)" aria-label="Volver" onclick={onclose}><Icon name="back" /></button>
     {/if}
-    <span class="kind-badge" class:note={d.kind === "note"}>
+    <span class="kind-badge">
       <Icon name={d.kind === "note" ? "note" : "tasks"} size={13} />{d.kind === "note" ? "Nota" : "Tarea"}
     </span>
-    <span class="spacer"></span>
-    <button class="icon-btn" class:on={d.pinned} title={d.pinned ? "Desfijar" : "Fijar arriba"} onclick={() => set("pinned", !d.pinned)}>
+    <span class="grow"></span>
+    <button
+      class="icon-btn"
+      class:on={d.pinned}
+      title={d.pinned ? "Desfijar" : "Fijar arriba"}
+      aria-label={d.pinned ? "Desfijar" : "Fijar arriba"}
+      aria-pressed={d.pinned}
+      onclick={() => set("pinned", !d.pinned)}
+    >
       <Icon name={d.pinned ? "pinned" : "pin"} />
     </button>
     <div class="more">
-      <button class="icon-btn" title="Más opciones" onclick={(e) => { e.stopPropagation(); menuOpen = !menuOpen; }}><Icon name="more" /></button>
+      <button
+        class="icon-btn"
+        title="Más opciones"
+        aria-label="Más opciones"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        onclick={(e) => { e.stopPropagation(); menuOpen = !menuOpen; }}
+      >
+        <Icon name="more" />
+      </button>
       {#if menuOpen}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="dropdown" onmousedown={(e) => e.stopPropagation()}>
-          <button class="mi" onclick={convert}>
+        <div class="dropdown" role="menu" tabindex="-1" aria-label="Más opciones" onmousedown={(e) => e.stopPropagation()}>
+          <button class="menu-item" role="menuitem" onclick={convert}>
             <Icon name={d.kind === "task" ? "note" : "tasks"} size={14} />Convertir en {d.kind === "task" ? "nota" : "tarea"}
           </button>
-          <button class="mi danger" onclick={remove}><Icon name="trash" size={14} />Mover a la papelera</button>
+          <button class="menu-item danger" role="menuitem" onclick={remove}><Icon name="trash" size={14} />Mover a la papelera</button>
         </div>
       {/if}
     </div>
     {#if !compact}
-      <button class="icon-btn" title="Cerrar (Esc)" onclick={onclose}><Icon name="x" /></button>
+      <button class="icon-btn" title="Cerrar (Esc)" aria-label="Cerrar" onclick={onclose}><Icon name="x" /></button>
     {/if}
   </header>
 
@@ -161,6 +188,7 @@
       class="title"
       rows="1"
       placeholder="Título"
+      aria-label="Título"
       value={d.title}
       use:autosize
       oninput={(e) => set("title", e.currentTarget.value.replace(/\n/g, " "))}
@@ -168,19 +196,19 @@
     ></textarea>
 
     <div class="field">
-      <span class="label">Lista</span>
-      <select value={d.listId} onchange={(e) => set("listId", Number(e.currentTarget.value))}>
+      <label class="label" for="ed-list">Lista</label>
+      <select id="ed-list" value={d.listId} onchange={(e) => set("listId", Number(e.currentTarget.value))}>
         {#each lists as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
       </select>
     </div>
 
     {#if d.kind === "task"}
       <div class="field">
-        <span class="label">Fecha</span>
+        <label class="label" for="ed-due">Fecha</label>
         <div class="row">
-          <input type="date" value={toDateInput(d.dueAt)} onchange={(e) => set("dueAt", fromInput(e.currentTarget.value))} />
+          <input id="ed-due" type="date" value={toDateInput(d.dueAt)} onchange={(e) => set("dueAt", fromInput(e.currentTarget.value))} />
           {#if d.dueAt != null}
-            <button class="icon-btn" title="Quitar fecha" onclick={() => set("dueAt", null)}><Icon name="x" size={13} /></button>
+            <button class="icon-btn" title="Quitar fecha" aria-label="Quitar fecha" onclick={() => set("dueAt", null)}><Icon name="x" size={13} /></button>
           {/if}
         </div>
       </div>
@@ -195,31 +223,37 @@
 
     {#if d.remindAt != null || d.dueAt != null}
       <div class="field">
-        <span class="label">Repetir</span>
-        <select value={d.recur} onchange={(e) => set("recur", e.currentTarget.value as Recur)}>
+        <label class="label" for="ed-recur">Repetir</label>
+        <select id="ed-recur" value={d.recur} onchange={(e) => set("recur", e.currentTarget.value as Recur)}>
           {#each Object.entries(RECUR_LABEL) as [k, label] (k)}<option value={k}>{label}</option>{/each}
         </select>
       </div>
     {/if}
 
     <div class="field">
-      <span class="label">Etiquetas</span>
-      <input type="text" placeholder="trabajo, casa…" value={d.tagsText} oninput={(e) => set("tagsText", e.currentTarget.value)} />
+      <label class="label" for="ed-tags">Etiquetas</label>
+      <input id="ed-tags" type="text" placeholder="trabajo, casa…" value={d.tagsText} oninput={(e) => set("tagsText", e.currentTarget.value)} />
     </div>
 
     <div class="notes-head">
       <span class="label">{d.kind === "note" ? "Contenido" : "Notas"}</span>
-      <button class="icon-btn" title={preview ? "Editar" : "Vista previa"} onclick={() => (preview = !preview)}>
+      <button
+        class="icon-btn"
+        title={preview ? "Editar" : "Vista previa"}
+        aria-label={preview ? "Editar" : "Vista previa"}
+        onclick={() => (preview = !preview)}
+      >
         <Icon name={preview ? "edit" : "eye"} />
       </button>
     </div>
     {#if preview}
-      <div class="markdown preview" role="presentation" onclick={clickLinks} ondblclick={(e) => { if (checkLineFromEvent(e) === null) preview = false; }}>
+      <div class="markdown preview" role="presentation" onclick={clickPreview} ondblclick={(e) => { if (checkLineFromEvent(e) === null) preview = false; }}>
         {#if d.body.trim()}{@html renderMarkdown(d.body)}{:else}<span class="faint">Sin contenido. Doble clic para escribir.</span>{/if}
       </div>
     {:else}
       <textarea
         class="content"
+        aria-label={d.kind === "note" ? "Contenido" : "Notas"}
         placeholder={"Escribe aquí… Admite **negrita**, *cursiva*, listas con - y casillas - [ ]"}
         value={d.body}
         oninput={(e) => set("body", e.currentTarget.value)}
@@ -235,7 +269,6 @@
 <style>
   .editor { display: flex; flex-direction: column; min-height: 0; background: var(--layer); border-left: 1px solid var(--border); }
   header { display: flex; align-items: center; gap: 2px; padding: 10px 12px; }
-  .spacer { flex: 1; }
   .editor.compact { border-left: none; background: transparent; flex: 1; }
   .compact header { padding: 6px 8px; }
   .compact .body { padding: 2px 14px 14px; }
@@ -247,15 +280,9 @@
   }
   .more { position: relative; }
   .dropdown {
-    position: absolute; right: 0; top: 34px; z-index: 5; width: 210px; padding: 4px;
+    position: absolute; right: 0; top: 34px; z-index: 5; width: 210px; padding: 4px; outline: none;
     display: flex; flex-direction: column; background: var(--solid); border-radius: var(--radius); box-shadow: var(--shadow);
   }
-  .mi {
-    display: flex; align-items: center; gap: 10px; border: none; background: transparent;
-    padding: 7px 10px; border-radius: var(--radius-sm); text-align: left; cursor: default;
-  }
-  .mi:hover { background: var(--hover); }
-  .mi.danger { color: var(--danger); }
   .body { flex: 1; overflow-y: auto; padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
   /* Con poca altura (modo mínimo) los campos no deben encogerse: la zona hace scroll. */
   .body > * { flex-shrink: 0; }
