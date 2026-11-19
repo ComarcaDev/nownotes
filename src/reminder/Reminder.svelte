@@ -50,7 +50,7 @@
     <span class="bell"><Icon name="bell" size={15} /></span>
     <span data-tauri-drag-region class="head">Recordatorio{alerts.length > 1 ? `s (${alerts.length})` : ""}</span>
     <span class="grow" data-tauri-drag-region></span>
-    <button class="icon-btn" title="Abrir Apunta" onclick={() => api.showMain()}><Icon name="all" size={15} /></button>
+    <button class="icon-btn" title="Abrir NowNotes" onclick={() => api.showMain()}><Icon name="all" size={15} /></button>
     <button class="icon-btn" title="Descartar todo" onclick={dismissAll}><Icon name="x" size={15} /></button>
   </header>
 

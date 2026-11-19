@@ -10,4 +10,8 @@ export interface ItemActions {
   pin: (it: Item) => void;
   setReminder: (it: Item, at: number | null) => void;
   menu: (e: MouseEvent, it: Item) => void;
+  /** Marca o desmarca una casilla «- [ ]» del contenido (por número de línea). */
+  toggleCheck: (it: Item, line: number) => void;
+  /** Guarda un nuevo orden manual (ids en el orden visible). */
+  reorder: (ids: number[]) => void;
 }

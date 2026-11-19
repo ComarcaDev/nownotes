@@ -187,6 +187,11 @@ select option { background: var(--solid); color: var(--text); }
 .markdown code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-family: Consolas, monospace; font-size: 12.5px; }
 .markdown a { color: var(--accent); }
 .markdown li.check { list-style: none; margin-left: -18px; }
+.markdown li.check input {
+  accent-color: var(--accent);
+  width: 14px; height: 14px; margin: 0 7px 0 0; vertical-align: -2px; cursor: default;
+}
+.markdown li.check s { color: var(--text-3); }
 
 /* Foco visible solo con teclado */
 button:focus-visible, [role="button"]:focus-visible, .chip:focus-visible {
@@ -229,6 +234,14 @@ kbd {
 @keyframes fade-out {
   to { opacity: 0; transform: translateX(8px); }
 }
+
+/* Reordenar arrastrando */
+[data-drag-id].dragging { opacity: 0.45; }
+.sorting { user-select: none; }
+[data-axis="y"] > .drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
+[data-axis="y"] > .drop-after { box-shadow: 0 2px 0 0 var(--accent); }
+[data-axis="grid"] > .drop-before { box-shadow: -3px 0 0 0 var(--accent); }
+[data-axis="grid"] > .drop-after { box-shadow: 3px 0 0 0 var(--accent); }
 
 .popover {
   position: fixed;

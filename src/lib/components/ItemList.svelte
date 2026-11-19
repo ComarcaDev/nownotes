@@ -7,6 +7,7 @@
   import { api, type Filter, type Item, type List } from "../api";
   import type { ItemActions } from "../actions";
   import { dayLabel, startOfDay } from "../dates";
+  import { reorderable } from "../reorder";
 
   let {
     items,
@@ -37,6 +38,8 @@
   const listById = $derived(new Map(lists.map((l) => [l.id, l])));
   const showList = $derived(filter.view !== "list");
   const canAdd = $derived(filter.view !== "done" && !searching);
+  // Orden manual solo donde no manda la fecha.
+  const canReorder = $derived(!searching && ["tasks", "notes", "list"].includes(filter.view));
 
   function groupByDay(src: Item[], when: (it: Item) => number): Section[] {
     const out: Section[] = [];
@@ -134,24 +137,31 @@
             {s.label}<span class="faint">{s.tasks.length + s.notes.length}</span>
           </div>
         {/if}
-        {#each s.tasks as it (it.id)}
-          <ItemRow
-            item={it}
-            list={listById.get(it.listId)}
-            {showList}
-            selected={it.id === selectedId}
-            {actions}
-            hideToday={filter.view === "today" && !searching}
-          />
-        {/each}
+        {#if s.tasks.length}
+          <div class="rows" data-axis="y" use:reorderable={{ enabled: canReorder, axis: "y", onreorder: actions.reorder }}>
+            {#each s.tasks as it (it.id)}
+              <ItemRow
+                item={it}
+                list={listById.get(it.listId)}
+                {showList}
+                selected={it.id === selectedId}
+                {actions}
+                draggable={canReorder}
+                hideToday={filter.view === "today" && !searching}
+              />
+            {/each}
+          </div>
+        {/if}
         {#if s.notes.length && compact}
-          {#each s.notes as it (it.id)}
-            <ItemRow item={it} list={listById.get(it.listId)} {showList} selected={it.id === selectedId} {actions} />
-          {/each}
-        {:else if s.notes.length}
-          <div class="grid">
+          <div class="rows" data-axis="y" use:reorderable={{ enabled: canReorder, axis: "y", onreorder: actions.reorder }}>
             {#each s.notes as it (it.id)}
-              <NoteCard item={it} list={listById.get(it.listId)} {showList} selected={it.id === selectedId} {actions} />
+              <ItemRow item={it} list={listById.get(it.listId)} {showList} selected={it.id === selectedId} {actions} draggable={canReorder} />
+            {/each}
+          </div>
+        {:else if s.notes.length}
+          <div class="grid" data-axis="grid" use:reorderable={{ enabled: canReorder, axis: "grid", onreorder: actions.reorder }}>
+            {#each s.notes as it (it.id)}
+              <NoteCard item={it} list={listById.get(it.listId)} {showList} selected={it.id === selectedId} {actions} draggable={canReorder} />
             {/each}
           </div>
         {/if}
@@ -172,6 +182,7 @@
   .wrap { display: flex; flex-direction: column; min-height: 0; flex: 1; }
   .list { flex: 1; overflow-y: auto; padding: 0 24px 24px; }
   .toolbar { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+  .rows { display: flex; flex-direction: column; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-bottom: 6px; }
   .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 56px 24px; }
   .empty-icon {

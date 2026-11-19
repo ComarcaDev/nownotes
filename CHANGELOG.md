@@ -1,6 +1,26 @@
 # Changelog
 
-Todos los cambios relevantes de Apunta se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
+Todos los cambios relevantes de NowNotes (antes «Apunta») se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
+
+## [2.0.0] - 2026-11-19
+
+### Cambiado
+- **Nuevo nombre: NowNotes** (antes «Apunta»), con logo «NN». El nombre funciona igual en español e inglés, de cara a la versión multilingüe.
+- La app se instala como «NowNotes» (identificador nuevo). Los datos de «Apunta» se trasladan solos al abrirla, también el inicio con Windows.
+- El orden de Tareas, Notas y Listas respeta el orden manual (los elementos nuevos aparecen arriba).
+
+### Añadido
+- **Fechas en lenguaje natural** (español e inglés) en la barra de creación y en la captura rápida: «mañana 18:00», «el lunes a las 9», «en 2 horas», «25/12», «tomorrow at 3pm»… Un chip muestra lo detectado y se puede descartar.
+- **Atajos configurables** en Ajustes: los globales (captura rápida y el nuevo **mostrar/ocultar**, `Ctrl+Alt+A`) y los de la app. Avisa de conflictos internos y de combinaciones que ya usa Windows u otra aplicación.
+- **Casillas clicables**: las listas `- [ ]` de una nota se marcan con un clic en la vista previa o en la tarjeta.
+- **Arrastrar para reordenar** en Tareas, Notas y Listas, con el asa ⋮⋮.
+- **Copias de seguridad automáticas** diarias (se guardan las últimas 7), con restauración y «Abrir carpeta» en Ajustes. Antes de restaurar se guarda una copia del estado actual.
+- **Bandeja**: el tooltip muestra las tareas pendientes de hoy y el menú incluye «Nueva nota o tarea».
+- **Aviso de versiones nuevas** (una vez al día, consultando GitHub; se puede desactivar).
+
+### Mejorado
+- Carga diferida de Ajustes, menú contextual y papelera: menos JavaScript al arrancar.
+- Nuevos tests: migración de datos, orden manual, copias de seguridad y analizador de fechas (Vitest, también en CI).
 
 ## [1.2.0] - 2026-11-18
 
@@ -61,6 +81,7 @@ Primera versión estable.
 ### Distribución
 - Instalador NSIS para el usuario actual (sin permisos de administrador) y versión portable en .zip, que guarda los datos junto al ejecutable.
 
-[1.2.0]: https://github.com/hujeanpaes/apunta/releases/tag/v1.2.0
-[1.1.0]: https://github.com/hujeanpaes/apunta/releases/tag/v1.1.0
-[1.0.0]: https://github.com/hujeanpaes/apunta/releases/tag/v1.0.0
+[2.0.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.0
+[1.2.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.2.0
+[1.1.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.1.0
+[1.0.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.0.0

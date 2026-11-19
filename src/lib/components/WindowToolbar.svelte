@@ -2,14 +2,16 @@
   // Tema, modo de ventana y anclado: tres iconos discretos.
   import Icon from "./Icon.svelte";
   import { win, isDark, toggleTheme, toggleMode, toggleOnTop } from "../window.svelte";
+  import { keys, display } from "../keys.svelte";
 
   const dark = $derived(win.ready && isDark());
+  const k = (combo: string) => (combo ? `  (${display(combo)})` : "");
 </script>
 
 <div class="toolbar" role="toolbar" aria-label="Ventana">
   <button
     class="icon-btn tb"
-    title={dark ? "Cambiar a tema claro  (Ctrl+Mayús+L)" : "Cambiar a tema oscuro  (Ctrl+Mayús+L)"}
+    title={(dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro") + k(keys.app.theme)}
     aria-label="Cambiar tema"
     onclick={toggleTheme}
   >
@@ -17,7 +19,7 @@
   </button>
   <button
     class="icon-btn tb"
-    title={win.mode === "mini" ? "Modo completo  (Ctrl+M)" : "Modo mínimo  (Ctrl+M)"}
+    title={(win.mode === "mini" ? "Modo completo" : "Modo mínimo") + k(keys.app.mode)}
     aria-label="Cambiar modo de ventana"
     onclick={toggleMode}
   >
@@ -26,7 +28,7 @@
   <button
     class="icon-btn tb"
     class:active={win.onTop}
-    title={win.onTop ? "Desanclar ventana  (Ctrl+P)" : "Anclar encima de todas las ventanas  (Ctrl+P)"}
+    title={(win.onTop ? "Desanclar ventana" : "Anclar encima de todas las ventanas") + k(keys.app.pin)}
     aria-label="Anclar ventana"
     aria-pressed={win.onTop}
     onclick={toggleOnTop}

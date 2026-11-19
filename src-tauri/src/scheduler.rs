@@ -5,7 +5,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
-use crate::{db, windows, AppState};
+use crate::{backup, commands, db, windows, AppState};
 
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
@@ -24,10 +24,15 @@ pub fn start(app: AppHandle) {
     });
 }
 
+/// Mantenimiento horario: vacía lo caducado de la papelera y crea la copia del día.
 fn purge(app: &AppHandle) {
+    let state = app.state::<AppState>();
     let n = {
-        let state = app.state::<AppState>();
         let c = state.db.lock().unwrap();
+        let day = chrono::Local::now().format("%Y-%m-%d").to_string();
+        if let Err(e) = backup::daily(&c, &state.data_dir, &day) {
+            eprintln!("No se pudo crear la copia de seguridad: {e}");
+        }
         db::purge_trash(&c, db::now_ms()).unwrap_or(0)
     };
     if n > 0 {
@@ -36,6 +41,8 @@ fn purge(app: &AppHandle) {
 }
 
 pub fn tick(app: &AppHandle) {
+    // Mantiene al día el tooltip de la bandeja (incluido el cambio de día).
+    commands::update_tray(app);
     let state = app.state::<AppState>();
     let now = db::now_ms();
     if *state.paused_until.lock().unwrap() > now {
@@ -82,7 +89,7 @@ pub fn tick(app: &AppHandle) {
         let _ = app
             .notification()
             .builder()
-            .title("Apunta · recordatorio")
+            .title("NowNotes · recordatorio")
             .body(body)
             .show();
     }

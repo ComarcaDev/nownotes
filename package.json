@@ -1,13 +1,13 @@
 {
-  "name": "apunta",
+  "name": "nownotes",
   "private": true,
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "Notas y tareas rápidas para Windows, con recordatorios.",
   "license": "MIT",
   "author": "hujeanpaes",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hujeanpaes/apunta.git"
+    "url": "https://github.com/hujeanpaes/nownotes.git"
   },
   "type": "module",
   "scripts": {
@@ -15,6 +15,7 @@
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:ui": "vitest run",
     "tauri": "tauri",
     "release": "tauri build && powershell -ExecutionPolicy Bypass -File scripts/make-portable.ps1"
   },
@@ -31,6 +32,7 @@
     "svelte": "^5",
     "svelte-check": "^4.7.8",
     "typescript": "^5",
-    "vite": "^6"
+    "vite": "^6",
+    "vitest": "^3.2.7"
   }
 }

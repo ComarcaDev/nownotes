@@ -5,7 +5,8 @@
   import Icon from "./Icon.svelte";
   import ReminderPicker from "./ReminderPicker.svelte";
   import { api, type Filter, type Item, type Kind } from "../api";
-  import { at, startOfDay, toDateInput, fromInput, dayLabel } from "../dates";
+  import { at, startOfDay, toDateInput, fromInput, dayLabel, fmt } from "../dates";
+  import { parseDate } from "../nlp";
 
   let {
     filter,
@@ -69,7 +70,13 @@
     dueAt = defaultDue();
     remindAt = null;
     showReminder = false;
+    nlpOff = false;
   }
+
+  // Fechas en lenguaje natural: «comprar pan mañana 18:00».
+  let nlpOff = $state(false);
+  const parsed = $derived(nlpOff || !text.trim() ? null : parseDate(text));
+  const parsedLabel = $derived(parsed ? (parsed.remindAt ? fmt(parsed.remindAt) : dayLabel(parsed.dueAt)) : "");
 
   const expanded = $derived(focused || text.trim() !== "" || remindAt != null);
   const canSubmit = $derived(text.trim() !== "");
@@ -86,14 +93,15 @@
     const t = text.trim();
     if (!t || busy) return;
     busy = true;
+    const p = parsed;
     try {
       const it = await api.saveItem({
         kind,
-        title: t,
+        title: p && p.title ? p.title : t,
         body: "",
         listId: filter.view === "list" ? (filter.listId ?? 1) : 1,
-        dueAt: kind === "task" ? dueAt : null,
-        remindAt,
+        dueAt: kind === "task" ? (p ? p.dueAt : dueAt) : null,
+        remindAt: remindAt ?? p?.remindAt ?? null,
         recur: "none",
         pinned: false,
         tags: filter.view === "tag" && filter.tag ? [filter.tag] : [],
@@ -163,7 +171,17 @@
 
   {#if expanded}
     <div class="extras" transition:slide={{ duration: 140 }}>
-      {#if kind === "task"}
+      {#if parsed}
+        <span class="detected" title={`Detectado: «${parsed.matches.join(" ")}»`}>
+          <Icon name={parsed.remindAt ? "bell" : "calendar"} size={12} />
+          {parsedLabel}
+          <button class="undo" title="No usar esta fecha" aria-label="Descartar fecha detectada" onclick={() => { nlpOff = true; input?.focus(); }}>
+            <Icon name="x" size={11} />
+          </button>
+        </span>
+        <span class="sep"></span>
+      {/if}
+      {#if kind === "task" && !parsed}
         <button class="chip" class:active={dueAt === today()} onclick={() => (dueAt = dueAt === today() ? null : today())}>
           <Icon name="sun" size={12} />Hoy
         </button>
@@ -179,7 +197,9 @@
         </span>
         <span class="sep"></span>
       {/if}
-      {#if showReminder || remindAt != null}
+      {#if parsed}
+        <span class="faint hint">Fecha detectada en el texto</span>
+      {:else if showReminder || remindAt != null}
         <Icon name="bell" size={13} />
         <ReminderPicker value={remindAt} onchange={(v) => { remindAt = v; if (v == null) showReminder = false; }} compact />
       {:else}
@@ -223,6 +243,16 @@
   .compact .extras { padding-left: 12px; }
   .kind.icons button { display: grid; place-items: center; padding: 3px 7px; }
   .sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; }
+  .detected {
+    display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px 2px 9px; border-radius: 999px;
+    font-size: 12px; background: var(--accent); color: var(--accent-text);
+  }
+  .undo {
+    display: grid; place-items: center; width: 18px; height: 18px; border: none; border-radius: 50%;
+    background: transparent; color: inherit; cursor: default; padding: 0;
+  }
+  .undo:hover { background: color-mix(in srgb, var(--accent-text) 20%, transparent); }
+  .hint { font-size: 11.5px; }
   .date { position: relative; display: inline-flex; }
   .date input { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; padding: 0; border: 0; }
 </style>

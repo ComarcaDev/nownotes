@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod backup;
 mod commands;
 mod db;
 mod paths;
@@ -7,6 +8,7 @@ mod recurrence;
 mod scheduler;
 mod windows;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -21,22 +23,23 @@ pub struct AppState {
     pub alerts: Mutex<Vec<i64>>,
     /// Avisos en pausa hasta este instante (ms).
     pub paused_until: Mutex<i64>,
-    pub shortcut: Mutex<String>,
+    /// Atajos globales registrados: acción → combinación.
+    pub globals: Mutex<HashMap<String, String>>,
     pub data_dir: PathBuf,
     pub portable: bool,
     pub start_minimized: bool,
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Abrir Apunta", true, None::<&str>)?;
-    let quick = MenuItem::with_id(app, "quick", "Captura rápida", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Abrir NowNotes", true, None::<&str>)?;
+    let quick = MenuItem::with_id(app, "quick", "Nueva nota o tarea", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", "Pausar avisos 1 hora", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quick, &pause, &sep, &quit])?;
 
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("Apunta")
+        .tooltip("NowNotes")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -69,11 +72,35 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Si «Apunta» (nombre anterior) estaba configurada para iniciar con Windows,
+/// se quita esa entrada y se registra NowNotes en su lugar.
+#[cfg(windows)]
+fn migrate_autostart(app: &AppHandle) {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+    use tauri_plugin_autostart::ManagerExt;
+    const NO_WINDOW: u32 = 0x0800_0000;
+    const RUN: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+    let had_legacy = Command::new("reg")
+        .args(["query", RUN, "/v", "Apunta"])
+        .creation_flags(NO_WINDOW)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if had_legacy {
+        let _ = Command::new("reg")
+            .args(["delete", RUN, "/v", "Apunta", "/f"])
+            .creation_flags(NO_WINDOW)
+            .output();
+        let _ = app.autolaunch().enable();
+    }
+}
+
 fn main() {
     let loc = paths::resolve_current();
-    std::fs::create_dir_all(&loc.data_dir).expect("No se pudo crear la carpeta de datos");
+    let migrated = paths::prepare(&loc).expect("No se pudo preparar la carpeta de datos");
     let conn =
-        db::open(&loc.data_dir.join("apunta.db")).expect("No se pudo abrir la base de datos");
+        db::open(&loc.data_dir.join(paths::DB_FILE)).expect("No se pudo abrir la base de datos");
     let start_minimized = std::env::args().any(|a| a == "--minimized");
 
     let app = tauri::Builder::default()
@@ -83,9 +110,14 @@ fn main() {
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        windows::toggle_quick(app);
+                .with_handler(|app, shortcut, event| {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    match commands::action_for(app, shortcut).as_deref() {
+                        Some("toggle") => windows::toggle_main(app),
+                        Some("quick") => windows::toggle_quick(app),
+                        _ => {}
                     }
                 })
                 .build(),
@@ -101,7 +133,7 @@ fn main() {
             db: Mutex::new(conn),
             alerts: Mutex::new(vec![]),
             paused_until: Mutex::new(0),
-            shortcut: Mutex::new(String::new()),
+            globals: Mutex::new(HashMap::new()),
             data_dir: loc.data_dir.clone(),
             portable: loc.portable,
             start_minimized,
@@ -110,14 +142,21 @@ fn main() {
             let handle = app.handle().clone();
             windows::create_main(&handle, !start_minimized)?;
             build_tray(&handle)?;
-            let shortcut = {
-                let st = handle.state::<AppState>();
-                let c = st.db.lock().unwrap();
-                db::get_setting(&c, "shortcut")
-            };
-            if let Err(err) = commands::apply_shortcut(&handle, &shortcut) {
-                eprintln!("{err}");
+            for (action, key) in commands::GLOBAL_ACTIONS {
+                let accel = {
+                    let st = handle.state::<AppState>();
+                    let c = st.db.lock().unwrap();
+                    db::get_setting(&c, key)
+                };
+                if let Err(err) = commands::apply_shortcut(&handle, action, &accel) {
+                    eprintln!("{err}");
+                }
             }
+            #[cfg(windows)]
+            if migrated {
+                migrate_autostart(&handle);
+            }
+            commands::update_tray(&handle);
             scheduler::start(handle);
             Ok(())
         })
@@ -174,9 +213,13 @@ fn main() {
             commands::delete_forever,
             commands::empty_trash,
             commands::set_ui_mode,
+            commands::reorder_items,
+            commands::list_backups,
+            commands::restore_backup,
+            commands::open_backups_dir,
         ])
         .build(tauri::generate_context!())
-        .expect("Error al iniciar Apunta");
+        .expect("Error al iniciar NowNotes");
 
     app.run(|_app, event| {
         // Si se cierra la última ventana visible (p. ej. el aviso), la app sigue viva en la bandeja.

@@ -13,7 +13,11 @@
     selected,
     actions,
     hideToday = false,
-  }: { item: Item; list: List | undefined; showList: boolean; selected: boolean; actions: ItemActions; hideToday?: boolean } = $props();
+    draggable = false,
+  }: {
+    item: Item; list: List | undefined; showList: boolean; selected: boolean; actions: ItemActions;
+    hideToday?: boolean; draggable?: boolean;
+  } = $props();
 
   // En la vista «Hoy» no se repite la etiqueta «Hoy» en cada fila.
   const showDue = $derived(
@@ -40,11 +44,17 @@
   class:leaving
   role="button"
   tabindex="-1"
+  data-drag-id={item.id}
   onclick={() => actions.select(item)}
   oncontextmenu={(e) => actions.menu(e, item)}
   onkeydown={() => {}}
   in:fly={{ y: -6, duration: 160 }}
 >
+  {#if draggable}
+    <span class="grip" data-drag-handle title="Arrastrar para ordenar" role="presentation" onclick={(e) => e.stopPropagation()}>
+      <Icon name="grip" size={14} />
+    </span>
+  {/if}
   {#if item.kind === "note"}
     <span class="note-icon"><Icon name="note" size={17} /></span>
   {:else}
@@ -106,6 +116,11 @@
   }
   .check:hover { border-color: var(--accent); background: var(--accent-soft); }
   .check.checked { background: var(--accent); border-color: var(--accent); animation: pop 0.25s ease-out; }
+  .grip {
+    position: absolute; left: -2px; top: 50%; translate: 0 -50%; display: grid; place-items: center;
+    width: 14px; height: 28px; color: var(--text-3); cursor: grab; opacity: 0; touch-action: none;
+  }
+  .row:hover .grip { opacity: 1; }
   .note-icon { flex: none; display: grid; place-items: center; width: 20px; color: var(--accent); }
   .main { flex: 1; min-width: 0; }
   .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

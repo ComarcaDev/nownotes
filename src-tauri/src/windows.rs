@@ -121,7 +121,7 @@ pub fn create_main(app: &AppHandle, show: bool) -> tauri::Result<()> {
     };
     let min = min_for(&mode);
     base(app, "main", "index.html")
-        .title("Apunta")
+        .title("NowNotes")
         .inner_size(size.0, size.1)
         .min_inner_size(min.0, min.1)
         .always_on_top(on_top)
@@ -142,6 +142,21 @@ pub fn create_main(app: &AppHandle, show: bool) -> tauri::Result<()> {
         });
     }
     Ok(())
+}
+
+/// Atajo global «mostrar/ocultar»: oculta si está al frente; si no, la trae.
+pub fn toggle_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let front = w.is_visible().unwrap_or(false)
+            && w.is_focused().unwrap_or(false)
+            && !w.is_minimized().unwrap_or(false);
+        if front {
+            save_size(app);
+            let _ = w.hide();
+        } else {
+            show_main(app);
+        }
+    }
 }
 
 pub fn show_main(app: &AppHandle) {
@@ -165,7 +180,7 @@ pub fn toggle_quick(app: &AppHandle) {
         return;
     }
     let r = base(app, "quick", "quick.html")
-        .title("Apunta · captura rápida")
+        .title("NowNotes · captura rápida")
         .inner_size(580.0, 244.0)
         .resizable(false)
         .decorations(false)
@@ -187,7 +202,7 @@ pub fn show_reminder(app: &AppHandle) {
     }
     let (w, h) = (390.0, 270.0);
     let mut b = base(app, "reminder", "reminder.html")
-        .title("Apunta · recordatorio")
+        .title("NowNotes · recordatorio")
         .inner_size(w, h)
         .resizable(false)
         .decorations(false)

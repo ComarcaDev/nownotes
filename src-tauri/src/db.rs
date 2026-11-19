@@ -23,6 +23,9 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("size_full", "1040,700"),
     ("size_mini", "380,560"),
     ("today_kind", "task"),
+    ("shortcut_toggle", "Ctrl+Alt+A"),
+    ("keys", ""),
+    ("update_check", "1"),
 ];
 
 /// Días que un elemento permanece en la papelera antes de borrarse definitivamente.
@@ -33,6 +36,9 @@ const SCHEMA_V2: &str = "
 ALTER TABLE items ADD COLUMN deleted_at INTEGER;
 CREATE INDEX IF NOT EXISTS idx_items_deleted ON items(deleted_at);
 ";
+
+/// v3: orden manual (arrastrar para reordenar). 0 = sin orden manual (aparece arriba).
+const SCHEMA_V3: &str = "ALTER TABLE items ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;";
 
 const SCHEMA_V1: &str = "
 CREATE TABLE IF NOT EXISTS lists(
@@ -205,7 +211,8 @@ pub fn open_in_memory() -> R<Connection> {
     Ok(c)
 }
 
-fn init(c: &Connection) -> R<()> {
+/// Aplica las migraciones pendientes (también tras restaurar una copia antigua).
+pub fn init(c: &Connection) -> R<()> {
     c.pragma_update(None, "foreign_keys", "ON")?;
     let v: i64 = c.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     if v < 1 {
@@ -215,6 +222,10 @@ fn init(c: &Connection) -> R<()> {
     if v < 2 {
         c.execute_batch(SCHEMA_V2)?;
         c.pragma_update(None, "user_version", 2)?;
+    }
+    if v < 3 {
+        c.execute_batch(SCHEMA_V3)?;
+        c.pragma_update(None, "user_version", 3)?;
     }
     Ok(())
 }
@@ -347,7 +358,9 @@ pub fn get_item(c: &Connection, id: i64) -> R<Option<Item>> {
     }
 }
 
-const TASK_ORDER: &str = "pinned DESC, (COALESCE(due_at, remind_at) IS NULL), COALESCE(due_at, remind_at), created_at DESC";
+/// Fijados → orden manual (los nuevos, sin orden, arriba) → fecha → más recientes.
+const TASK_ORDER: &str = "pinned DESC, (sort <> 0), sort, (COALESCE(due_at, remind_at) IS NULL), COALESCE(due_at, remind_at), created_at DESC";
+const NOTE_ORDER: &str = "pinned DESC, (sort <> 0), sort, updated_at DESC";
 
 pub fn query_items(c: &Connection, f: &Filter, end_of_today: i64) -> R<Vec<Item>> {
     let mut wh: Vec<String> = vec![];
@@ -383,7 +396,7 @@ pub fn query_items(c: &Connection, f: &Filter, end_of_today: i64) -> R<Vec<Item>
             }
             "notes" => {
                 wh.push("kind='note' AND done=0".into());
-                order = "pinned DESC, updated_at DESC";
+                order = NOTE_ORDER;
             }
             "done" => {
                 wh.push("done=1".into());
@@ -462,6 +475,18 @@ pub fn save_item(c: &Connection, inp: &ItemInput, now: i64) -> R<Item> {
     };
     set_tags(c, id, &inp.tags)?;
     get_item(c, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
+}
+
+/// Guarda el orden manual: `ids` en el orden en que deben mostrarse.
+pub fn reorder_items(c: &Connection, ids: &[i64]) -> R<()> {
+    let tx = c.unchecked_transaction()?;
+    for (i, id) in ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE items SET sort=?2 WHERE id=?1",
+            params![id, i as i64 + 1],
+        )?;
+    }
+    tx.commit()
 }
 
 // ---------- papelera ----------
@@ -926,6 +951,26 @@ mod tests {
     }
 
     #[test]
+    fn manual_order_and_new_items_on_top() {
+        let c = open_in_memory().unwrap();
+        let a = save_item(&c, &task("A", None, "none"), 1).unwrap();
+        let b = save_item(&c, &task("B", None, "none"), 2).unwrap();
+        let cc = save_item(&c, &task("C", None, "none"), 3).unwrap();
+        let ids = |c: &Connection| -> Vec<i64> {
+            query_items(c, &f("tasks"), 0)
+                .unwrap()
+                .iter()
+                .map(|i| i.id)
+                .collect()
+        };
+        assert_eq!(ids(&c), vec![cc.id, b.id, a.id]); // por defecto, más recientes arriba
+        reorder_items(&c, &[a.id, cc.id, b.id]).unwrap();
+        assert_eq!(ids(&c), vec![a.id, cc.id, b.id]);
+        let d = save_item(&c, &task("D", None, "none"), 4).unwrap();
+        assert_eq!(ids(&c), vec![d.id, a.id, cc.id, b.id]); // lo nuevo, arriba
+    }
+
+    #[test]
     fn migration_v1_to_v2_keeps_data() {
         let c = Connection::open_in_memory().unwrap();
         c.execute_batch(SCHEMA_V1).unwrap();
@@ -939,7 +984,7 @@ mod tests {
         let v: i64 = c
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 2);
+        assert_eq!(v, 3);
         let items = query_items(&c, &f("tasks"), 0).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].title, "Vieja");

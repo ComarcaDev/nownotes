@@ -5,7 +5,7 @@
   import ReminderPicker from "./ReminderPicker.svelte";
   import { api, type Item, type Kind, type List, type Recur } from "../api";
   import { fmt, fromInput, toDateInput, RECUR_LABEL } from "../dates";
-  import { renderMarkdown } from "../markdown";
+  import { renderMarkdown, toggleCheckLine, checkLineFromEvent } from "../markdown";
 
   let {
     item,
@@ -103,6 +103,12 @@
   }
 
   function clickLinks(e: MouseEvent) {
+    // Casilla «- [ ]»: se marca sin salir de la vista previa.
+    const line = checkLineFromEvent(e);
+    if (line !== null) {
+      set("body", toggleCheckLine(d.body, line));
+      return;
+    }
     const a = (e.target as HTMLElement).closest("a");
     if (a) {
       e.preventDefault();
@@ -208,7 +214,7 @@
       </button>
     </div>
     {#if preview}
-      <div class="markdown preview" role="presentation" onclick={clickLinks} ondblclick={() => (preview = false)}>
+      <div class="markdown preview" role="presentation" onclick={clickLinks} ondblclick={(e) => { if (checkLineFromEvent(e) === null) preview = false; }}>
         {#if d.body.trim()}{@html renderMarkdown(d.body)}{:else}<span class="faint">Sin contenido. Doble clic para escribir.</span>{/if}
       </div>
     {:else}

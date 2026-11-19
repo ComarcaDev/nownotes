@@ -36,6 +36,9 @@ jobs:
       - name: Comprobar interfaz (svelte-check)
         run: npm run check
 
+      - name: Tests de la interfaz (fechas en lenguaje natural)
+        run: npm run test:ui
+
       - name: Compilar interfaz
         run: npm run build
 

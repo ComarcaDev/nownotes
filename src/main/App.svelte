@@ -10,13 +10,18 @@
   import Sidebar from "../lib/components/Sidebar.svelte";
   import ItemList from "../lib/components/ItemList.svelte";
   import Editor from "../lib/components/Editor.svelte";
-  import SettingsDialog from "../lib/components/Settings.svelte";
-  import ContextMenu from "../lib/components/ContextMenu.svelte";
   import Toast from "../lib/components/Toast.svelte";
   import Icon from "../lib/components/Icon.svelte";
   import WindowToolbar from "../lib/components/WindowToolbar.svelte";
-  import TrashList from "../lib/components/TrashList.svelte";
+  import { toggleCheckLine } from "../lib/markdown";
+  // Carga diferida: solo se descargan al usarse (menos JS al arrancar).
+  const loadSettings = () => import("../lib/components/Settings.svelte");
+  const loadContextMenu = () => import("../lib/components/ContextMenu.svelte");
+  const loadTrash = () => import("../lib/components/TrashList.svelte");
   import { win, initWindowState, toggleTheme, toggleMode, toggleOnTop } from "../lib/window.svelte";
+  import { keys, initKeys, matches, display } from "../lib/keys.svelte";
+  import { checkForUpdate, dueForCheck } from "../lib/updates";
+  import { openUrl } from "@tauri-apps/plugin-opener";
 
   let filter = $state<Filter>({ view: "today" });
   let searchText = $state("");
@@ -28,7 +33,7 @@
   let selectedId = $state<number | null>(null);
   let selectedItem = $state<Item | null>(null);
   let showSettings = $state(false);
-  let shortcut = $state("");
+  const shortcut = $derived(keys.global.quick);
   let menu = $state<{ x: number; y: number; item: Item } | null>(null);
   let width = $state(1040);
   let searchEl = $state<HTMLInputElement>();
@@ -177,6 +182,17 @@
       e.stopPropagation();
       menu = { x: e.clientX, y: e.clientY, item: it };
     },
+    async toggleCheck(it, line) {
+      await api.saveItem(toInput(it, { body: toggleCheckLine(it.body, line) }));
+    },
+    async reorder(ids) {
+      // Orden optimista: se aplica ya en pantalla y luego se guarda.
+      const pos = new Map(ids.map((id, i) => [id, i]));
+      const moved = items.filter((i) => pos.has(i.id)).sort((a, b) => pos.get(a.id)! - pos.get(b.id)!);
+      let k = 0;
+      items = items.map((i) => (pos.has(i.id) ? moved[k++] : i));
+      await api.reorderItems(ids);
+    },
   };
 
   async function onMenu(a: MenuAction) {
@@ -197,6 +213,20 @@
   }
 
   // ---------- teclado ----------
+  /** Aviso discreto de versión nueva (como mucho una vez al día, si está activado). */
+  async function notifyUpdate() {
+    try {
+      const [s, info] = await Promise.all([api.settings(), api.info()]);
+      if (s.update_check === "0" || !dueForCheck()) return;
+      const up = await checkForUpdate(info.version);
+      if (up) {
+        showToast(`NowNotes ${up.version} disponible`, { label: "Ver novedades", run: () => openUrl(up.url) }, 15000);
+      }
+    } catch {
+      /* sin conexión: se intentará otro día */
+    }
+  }
+
   function isTyping(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     return t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable;
@@ -204,12 +234,12 @@
 
   function onKey(e: KeyboardEvent) {
     if (showSettings || menu) return;
-    const k = e.key.toLowerCase();
-    if (e.ctrlKey && e.shiftKey && k === "l") { e.preventDefault(); toggleTheme(); return; }
-    if (e.ctrlKey && !e.shiftKey && k === "m") { e.preventDefault(); toggleMode(); return; }
-    if (e.ctrlKey && !e.shiftKey && k === "p") { e.preventDefault(); toggleOnTop(); return; }
-    if (e.ctrlKey && k === "n") { e.preventDefault(); newEl?.focus(); return; }
-    if (e.ctrlKey && k === "f") {
+    // Atajos configurables (Ajustes → Atajos)
+    if (matches(e, "theme")) { e.preventDefault(); toggleTheme(); return; }
+    if (matches(e, "mode")) { e.preventDefault(); toggleMode(); return; }
+    if (matches(e, "pin")) { e.preventDefault(); toggleOnTop(); return; }
+    if (matches(e, "new")) { e.preventDefault(); if (mini && miniSearch) closeMiniSearch(); newEl?.focus(); return; }
+    if (matches(e, "search")) {
       e.preventDefault();
       if (mini && !miniSearch) openMiniSearch();
       else { searchEl?.focus(); searchEl?.select(); }
@@ -240,11 +270,8 @@
 
   onMount(() => {
     const unItems = listen("items-changed", scheduleReload);
-    const unSettings = listen<[string, string]>("settings-changed", (e) => {
-      if (e.payload[0] === "shortcut") shortcut = e.payload[1];
-    });
-    api.settings().then((s) => (shortcut = s.shortcut));
     initWindowState();
+    initKeys();
     // Se muestra la ventana cuando ya está pintada (sin parpadeo blanco).
     (async () => {
       await reload();
@@ -255,8 +282,9 @@
           await win.setFocus();
         });
       }
+      notifyUpdate();
     })();
-    return () => { unItems.then((f) => f()); unSettings.then((f) => f()); };
+    return () => { unItems.then((f) => f()); };
   });
 </script>
 
@@ -297,7 +325,7 @@
           </button>
         {/each}
       </div>
-      <button class="icon-btn tb-search" title="Buscar  (Ctrl+F)" aria-label="Buscar" onclick={openMiniSearch}>
+      <button class="icon-btn tb-search" title="Buscar  ({display(keys.app.search)})" aria-label="Buscar" onclick={openMiniSearch}>
         <Icon name="search" size={16} />
       </button>
       {/if}
@@ -354,7 +382,7 @@
       </div>
     </header>
     {#if filter.view === "trash" && !searching}
-      <TrashList {items} />
+      {#await loadTrash() then m}<m.default {items} />{/await}
     {:else}
     <ItemList
       {items}
@@ -379,11 +407,14 @@
 {/if}
 
 {#if menu}
-  <ContextMenu x={menu.x} y={menu.y} item={menu.item} {lists} onaction={onMenu} onclose={() => (menu = null)} />
+  {@const m0 = menu}
+  {#await loadContextMenu() then m}
+    <m.default x={m0.x} y={m0.y} item={m0.item} {lists} onaction={onMenu} onclose={() => (menu = null)} />
+  {/await}
 {/if}
 
 {#if showSettings}
-  <SettingsDialog onclose={() => (showSettings = false)} />
+  {#await loadSettings() then m}<m.default onclose={() => (showSettings = false)} />{/await}
 {/if}
 
 <Toast />

@@ -13,6 +13,24 @@ function inline(src: string): string {
   return s;
 }
 
+const CHECK_RE = /^\s*[-*] \[( |x|X)\] (.*)$/;
+
+/** Marca o desmarca la casilla `- [ ]` de la línea `idx` del texto. */
+export function toggleCheckLine(md: string, idx: number): string {
+  const lines = md.split(/\r?\n/);
+  const line = lines[idx];
+  if (line === undefined || !CHECK_RE.test(line)) return md;
+  lines[idx] = line.replace(/\[( |x|X)\]/, (m) => (m === "[ ]" ? "[x]" : "[ ]"));
+  return lines.join("\n");
+}
+
+/** Línea de la casilla pulsada (o null si el clic no fue en una casilla). */
+export function checkLineFromEvent(e: Event): number | null {
+  const el = e.target as HTMLElement | null;
+  if (!el || el.tagName !== "INPUT" || !el.dataset.line) return null;
+  return Number(el.dataset.line);
+}
+
 export function renderMarkdown(md: string): string {
   const out: string[] = [];
   let inList = false;
@@ -26,8 +44,10 @@ export function renderMarkdown(md: string): string {
     inList = false;
   };
 
-  for (const line of md.split(/\r?\n/)) {
-    const check = line.match(/^\s*[-*] \[( |x|X)\] (.*)$/);
+  const lines = md.split(/\r?\n/);
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+    const check = line.match(CHECK_RE);
     const bullet = line.match(/^\s*[-*] (.*)$/);
     const heading = line.match(/^(#{1,3}) (.*)$/);
     if (check || bullet) {
@@ -36,7 +56,9 @@ export function renderMarkdown(md: string): string {
       inList = true;
       if (check) {
         const done = check[1] !== " ";
-        out.push(`<li class="check">${done ? "☑" : "☐"} ${done ? `<s>${inline(check[2])}</s>` : inline(check[2])}</li>`);
+        // La casilla lleva su número de línea para poder marcarla con un clic.
+        const box = `<input type="checkbox" data-line="${idx}"${done ? " checked" : ""} aria-label="Marcar">`;
+        out.push(`<li class="check">${box}${done ? `<s>${inline(check[2])}</s>` : inline(check[2])}</li>`);
       } else {
         out.push(`<li>${inline(bullet![1])}</li>`);
       }

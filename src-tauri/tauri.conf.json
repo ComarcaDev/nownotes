@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Apunta",
-  "version": "1.2.0",
-  "identifier": "io.github.hujeanpaes.apunta",
+  "productName": "NowNotes",
+  "version": "2.0.0",
+  "identifier": "io.github.hujeanpaes.nownotes",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src ipc: http://ipc.localhost https://api.github.com"
     }
   },
   "bundle": {
@@ -20,9 +20,9 @@
     "targets": ["nsis"],
     "publisher": "hujeanpaes",
     "copyright": "© 2026 hujeanpaes. Licencia MIT.",
-    "homepage": "https://github.com/hujeanpaes/apunta",
+    "homepage": "https://github.com/hujeanpaes/nownotes",
     "shortDescription": "Notas y tareas rápidas con recordatorios",
-    "longDescription": "Apunta es una app ligera para Windows para capturar notas y tareas al instante, con recordatorios, repeticiones y atajo global.",
+    "longDescription": "NowNotes es una app ligera para Windows para capturar notas y tareas al instante, con recordatorios, repeticiones y atajo global.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

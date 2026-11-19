@@ -5,7 +5,7 @@
   import type { Item, List } from "../api";
   import type { ItemActions } from "../actions";
   import { fmt, dayLabel } from "../dates";
-  import { renderMarkdown } from "../markdown";
+  import { renderMarkdown, checkLineFromEvent } from "../markdown";
 
   let {
     item,
@@ -13,7 +13,16 @@
     showList,
     selected,
     actions,
-  }: { item: Item; list: List | undefined; showList: boolean; selected: boolean; actions: ItemActions } = $props();
+    draggable = false,
+  }: {
+    item: Item; list: List | undefined; showList: boolean; selected: boolean; actions: ItemActions; draggable?: boolean;
+  } = $props();
+
+  function onClick(e: MouseEvent) {
+    const line = checkLineFromEvent(e);
+    if (line !== null) actions.toggleCheck(item, line); // casilla: se marca sin abrir el editor
+    else actions.select(item);
+  }
 
   // Vista previa: primeras líneas renderizadas, sin enlaces activos.
   const preview = $derived(
@@ -26,12 +35,18 @@
   class:selected
   role="button"
   tabindex="-1"
-  onclick={() => actions.select(item)}
+  data-drag-id={item.id}
+  onclick={onClick}
   oncontextmenu={(e) => actions.menu(e, item)}
   onkeydown={() => {}}
   in:fly={{ y: -6, duration: 160 }}
 >
   {#if showList && list && list.id !== 1}<i class="stripe" style:background={list.color}></i>{/if}
+  {#if draggable}
+    <span class="grip" data-drag-handle title="Arrastrar para ordenar" role="presentation" onclick={(e) => e.stopPropagation()}>
+      <Icon name="grip" size={14} />
+    </span>
+  {/if}
   <div class="head">
     <div class="title">{item.title || "Sin título"}</div>
     {#if item.pinned}<span class="pin"><Icon name="pinned" size={13} /></span>{/if}
@@ -83,5 +98,11 @@
     background: var(--card); border-radius: var(--radius-sm);
   }
   .card:hover .actions { opacity: 1; }
+  .grip {
+    position: absolute; left: 50%; top: 2px; translate: -50% 0; display: grid; place-items: center;
+    width: 28px; height: 14px; color: var(--text-3); cursor: grab; opacity: 0; touch-action: none;
+  }
+  .card:hover .grip { opacity: 1; }
+  .preview :global(input) { pointer-events: auto; }
   .act { width: 26px; height: 26px; }
 </style>

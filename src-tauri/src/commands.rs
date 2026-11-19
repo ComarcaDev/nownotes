@@ -4,10 +4,11 @@ use std::collections::HashMap;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::db::{self, Counts, Filter, Item, ItemInput, List, TagCount};
-use crate::{windows, AppState};
+use crate::{backup, windows, AppState};
 
 type Res<T> = Result<T, String>;
 
@@ -17,6 +18,7 @@ fn e<E: std::fmt::Display>(err: E) -> String {
 
 fn changed(app: &AppHandle) {
     let _ = app.emit("items-changed", ());
+    update_tray(app);
 }
 
 #[derive(Serialize)]
@@ -216,36 +218,145 @@ pub fn get_settings(state: State<AppState>) -> Res<HashMap<String, String>> {
     db::all_settings(&c).map_err(e)
 }
 
-pub fn apply_shortcut(app: &AppHandle, shortcut: &str) -> Res<()> {
+// ---------- atajos globales ----------
+
+/// Acciones con atajo global y el ajuste donde se guarda cada una.
+pub const GLOBAL_ACTIONS: &[(&str, &str)] = &[("quick", "shortcut"), ("toggle", "shortcut_toggle")];
+
+fn action_label(action: &str) -> &'static str {
+    match action {
+        "quick" => "la captura rápida",
+        "toggle" => "mostrar/ocultar NowNotes",
+        _ => "otra acción",
+    }
+}
+
+fn parse_shortcut(accel: &str) -> Option<Shortcut> {
+    accel.parse::<Shortcut>().ok()
+}
+
+/// Registra (o cambia) el atajo global de una acción, comprobando conflictos.
+pub fn apply_shortcut(app: &AppHandle, action: &str, accel: &str) -> Res<()> {
     let gs = app.global_shortcut();
     let state = app.state::<AppState>();
-    let mut current = state.shortcut.lock().unwrap();
-    if !current.is_empty() {
-        let _ = gs.unregister(current.as_str());
+    let mut globals = state.globals.lock().unwrap();
+    let wanted = accel.trim();
+    let wanted_sc = if wanted.is_empty() {
+        None
+    } else {
+        Some(parse_shortcut(wanted).ok_or_else(|| format!("Combinación no válida: «{wanted}»"))?)
+    };
+    if let Some(sc) = &wanted_sc {
+        for (other, acc) in globals.iter() {
+            if other != action && parse_shortcut(acc).as_ref() == Some(sc) {
+                return Err(format!(
+                    "«{wanted}» ya se usa para {}.",
+                    action_label(other)
+                ));
+            }
+        }
     }
-    let wanted = shortcut.trim();
-    if wanted.is_empty() {
-        current.clear();
+    let old = globals.get(action).cloned();
+    if let Some(o) = &old {
+        let _ = gs.unregister(o.as_str());
+    }
+    let Some(sc) = wanted_sc else {
+        globals.remove(action);
         return Ok(());
-    }
-    match gs.register(wanted) {
+    };
+    match gs.register(sc) {
         Ok(()) => {
-            *current = wanted.to_string();
+            globals.insert(action.to_string(), wanted.to_string());
             Ok(())
         }
-        Err(err) => {
-            if !current.is_empty() {
-                let _ = gs.register(current.as_str());
+        Err(_) => {
+            if let Some(o) = &old {
+                let _ = gs.register(o.as_str());
             }
-            Err(format!("No se pudo registrar el atajo «{wanted}»: {err}"))
+            Err(format!(
+                "«{wanted}» está en uso por Windows u otra aplicación. Elige otra combinación."
+            ))
         }
     }
+}
+
+/// Acción global asociada a la combinación pulsada.
+pub fn action_for(app: &AppHandle, pressed: &Shortcut) -> Option<String> {
+    let state = app.state::<AppState>();
+    let globals = state.globals.lock().unwrap();
+    globals
+        .iter()
+        .find(|(_, acc)| parse_shortcut(acc).as_ref() == Some(pressed))
+        .map(|(a, _)| a.clone())
+}
+
+// ---------- bandeja ----------
+
+/// Tooltip de la bandeja con las tareas pendientes de hoy.
+pub fn update_tray(app: &AppHandle) {
+    let n = {
+        let st = app.state::<AppState>();
+        let c = st.db.lock().unwrap();
+        db::counts(&c, db::end_of_today_ms())
+            .map(|c| c.today)
+            .unwrap_or(0)
+    };
+    let tip = match n {
+        0 => "NowNotes · Nada pendiente hoy".to_string(),
+        1 => "NowNotes · 1 tarea para hoy".to_string(),
+        n => format!("NowNotes · {n} tareas para hoy"),
+    };
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_tooltip(Some(tip));
+    }
+}
+
+// ---------- orden manual y copias de seguridad ----------
+
+#[tauri::command]
+pub fn reorder_items(app: AppHandle, state: State<AppState>, ids: Vec<i64>) -> Res<()> {
+    {
+        let c = state.db.lock().unwrap();
+        db::reorder_items(&c, &ids).map_err(e)?;
+    }
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_backups(state: State<AppState>) -> Vec<backup::BackupInfo> {
+    backup::list(&state.data_dir)
+}
+
+#[tauri::command]
+pub fn restore_backup(app: AppHandle, state: State<AppState>, name: String) -> Res<()> {
+    let source = backup::path_of(&state.data_dir, &name)?;
+    {
+        let mut c = state.db.lock().unwrap();
+        let stamp = chrono::Local::now().format("%Y-%m-%d-%H%M%S").to_string();
+        backup::snapshot(&c, &state.data_dir, &stamp)?;
+        backup::restore(&mut c, &source)?;
+        db::init(&c).map_err(e)?;
+    }
+    state.alerts.lock().unwrap().clear();
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_backups_dir(app: AppHandle, state: State<AppState>) -> Res<()> {
+    let dir = backup::dir(&state.data_dir);
+    std::fs::create_dir_all(&dir).map_err(e)?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(e)
 }
 
 #[tauri::command]
 pub fn set_setting(app: AppHandle, state: State<AppState>, key: String, value: String) -> Res<()> {
     match key.as_str() {
-        "shortcut" => apply_shortcut(&app, &value)?,
+        "shortcut" => apply_shortcut(&app, "quick", &value)?,
+        "shortcut_toggle" => apply_shortcut(&app, "toggle", &value)?,
         "theme" => {
             let theme = windows::theme_from(&value);
             for w in app.webview_windows().values() {

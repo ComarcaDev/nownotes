@@ -11,6 +11,7 @@
     tasks: "M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM8.5 12l2.5 2.5 4.5-5",
     checkall: "M2 12.5l4.5 4.5L16 7.5M11 16l1 1 9.5-9.5",
     more: "M5 12h.01M12 12h.01M19 12h.01",
+    grip: "M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01",
     moon: "M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z",
     minimize: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6ZM12 12h5v5h-5z",
     expand: "M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7",
@@ -42,7 +43,7 @@
   viewBox="0 0 24 24"
   fill="none"
   stroke="currentColor"
-  stroke-width={name === "more" ? 3 : 1.7}
+  stroke-width={name === "more" || name === "grip" ? 3 : 1.7}
   stroke-linecap="round"
   stroke-linejoin="round"
   aria-hidden="true"

@@ -3,7 +3,8 @@
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { api, type Kind, type List } from "../lib/api";
-  import { startOfDay } from "../lib/dates";
+  import { startOfDay, fmt, dayLabel } from "../lib/dates";
+  import { parseDate } from "../lib/nlp";
   import ReminderPicker from "../lib/components/ReminderPicker.svelte";
   import Icon from "../lib/components/Icon.svelte";
 
@@ -29,7 +30,13 @@
     text = "";
     remindAt = null;
     kind = "task";
+    nlpOff = false;
   }
+
+  // Fechas en lenguaje natural sobre la primera línea («llamar a Ana mañana 9:00»).
+  let nlpOff = $state(false);
+  const firstLine = $derived(text.split("\n")[0] ?? "");
+  const parsed = $derived(nlpOff || !firstLine.trim() ? null : parseDate(firstLine));
 
   async function hide() {
     reset();
@@ -41,14 +48,16 @@
     if (!t || saving) return;
     saving = true;
     const [first, ...rest] = t.split("\n");
+    const p = parsed;
+    const remind = remindAt ?? p?.remindAt ?? null;
     try {
       await api.saveItem({
         kind,
-        title: first.trim(),
+        title: p && p.title ? p.title : first.trim(),
         body: rest.join("\n").trim(),
         listId,
-        dueAt: kind === "task" && remindAt != null ? startOfDay(remindAt).getTime() : null,
-        remindAt,
+        dueAt: kind !== "task" ? null : p ? p.dueAt : remind != null ? startOfDay(remind).getTime() : null,
+        remindAt: remind,
         recur: "none",
         pinned: false,
         tags: [],
@@ -94,9 +103,19 @@
   ></textarea>
 
   <footer>
-    {#key pickerKey}
-      <ReminderPicker value={remindAt} onchange={(v) => (remindAt = v)} compact />
-    {/key}
+    {#if parsed}
+      <span class="detected" title={`Detectado: «${parsed.matches.join(" ")}»`}>
+        <Icon name={parsed.remindAt ? "bell" : "calendar"} size={12} />
+        {parsed.remindAt ? fmt(parsed.remindAt) : dayLabel(parsed.dueAt)}
+        <button class="undo" title="No usar esta fecha" aria-label="Descartar fecha detectada" onclick={() => { nlpOff = true; el?.focus(); }}>
+          <Icon name="x" size={11} />
+        </button>
+      </span>
+    {:else}
+      {#key pickerKey}
+        <ReminderPicker value={remindAt} onchange={(v) => (remindAt = v)} compact />
+      {/key}
+    {/if}
     <span class="grow"></span>
     <span class="hint faint">Enter guardar · Tab tarea/nota · Esc cerrar</span>
   </footer>
@@ -107,6 +126,14 @@
   header { display: flex; align-items: center; gap: 8px; }
   header select { padding: 3px 8px; font-size: 12.5px; max-width: 170px; }
   .grow { flex: 1; align-self: stretch; }
+  .detected {
+    display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px 2px 9px; border-radius: 999px;
+    font-size: 12px; background: var(--accent); color: var(--accent-text);
+  }
+  .undo {
+    display: grid; place-items: center; width: 18px; height: 18px; border: none; border-radius: 50%;
+    background: transparent; color: inherit; cursor: default; padding: 0;
+  }
   textarea {
     flex: 1; font-size: 16px; line-height: 1.45; padding: 10px 12px;
     background: var(--card); border-radius: 6px;

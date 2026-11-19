@@ -43,6 +43,7 @@ export interface Counts { today: number; upcoming: number; tasks: number; notes:
 export interface Filter { view: View; listId?: number | null; tag?: string | null; search?: string | null }
 export type Settings = Record<string, string>;
 export interface Info { dataDir: string; portable: boolean; version: string }
+export interface BackupInfo { name: string; modified: number; size: number }
 
 export const api = {
   info: () => invoke<Info>("get_info"),
@@ -72,4 +73,8 @@ export const api = {
   deleteForever: (id: number) => invoke<void>("delete_forever", { id }),
   emptyTrash: () => invoke<number>("empty_trash"),
   setUiMode: (mode: UiMode) => invoke<void>("set_ui_mode", { mode }),
+  reorderItems: (ids: number[]) => invoke<void>("reorder_items", { ids }),
+  listBackups: () => invoke<BackupInfo[]>("list_backups"),
+  restoreBackup: (name: string) => invoke<void>("restore_backup", { name }),
+  openBackupsDir: () => invoke<void>("open_backups_dir"),
 };
