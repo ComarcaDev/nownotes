@@ -292,20 +292,35 @@ pub fn action_for(app: &AppHandle, pressed: &Shortcut) -> Option<String> {
 
 // ---------- bandeja ----------
 
-/// Tooltip de la bandeja con las tareas pendientes de hoy.
+/// «1 tarea», «3 notas»…
+fn plural(n: i64, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// Texto de lo que hay para hoy: «1 tarea y 2 notas para hoy».
+fn today_summary(tasks: i64, notes: i64) -> String {
+    match (tasks, notes) {
+        (0, 0) => "Nada pendiente hoy".into(),
+        (t, 0) => format!("{} para hoy", plural(t, "tarea", "tareas")),
+        (0, n) => format!("{} para hoy", plural(n, "nota", "notas")),
+        (t, n) => format!(
+            "{} y {} para hoy",
+            plural(t, "tarea", "tareas"),
+            plural(n, "nota", "notas")
+        ),
+    }
+}
+
+/// Tooltip de la bandeja con lo que hay para hoy.
 pub fn update_tray(app: &AppHandle) {
-    let n = {
+    let (tasks, notes) = {
         let state = app.state::<AppState>();
         let c = state.db();
         db::counts(&c, db::end_of_today_ms())
-            .map(|c| c.today)
-            .unwrap_or(0)
+            .map(|c| (c.today_tasks, c.today - c.today_tasks))
+            .unwrap_or((0, 0))
     };
-    let tip = match n {
-        0 => "NowNotes · Nada pendiente hoy".to_string(),
-        1 => "NowNotes · 1 tarea para hoy".to_string(),
-        n => format!("NowNotes · {n} tareas para hoy"),
-    };
+    let tip = format!("NowNotes · {}", today_summary(tasks, notes));
     if let Some(tray) = app.tray_by_id("main") {
         let _ = tray.set_tooltip(Some(tip));
     }
@@ -394,4 +409,18 @@ pub async fn set_ui_mode(app: AppHandle, mode: String) -> Res<()> {
     })?;
     let _ = app.emit(EV_SETTINGS, ("ui_mode", mode));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::today_summary;
+
+    #[test]
+    fn tray_summary_uses_correct_plurals() {
+        assert_eq!(today_summary(0, 0), "Nada pendiente hoy");
+        assert_eq!(today_summary(1, 0), "1 tarea para hoy");
+        assert_eq!(today_summary(0, 2), "2 notas para hoy");
+        assert_eq!(today_summary(1, 1), "1 tarea y 1 nota para hoy");
+        assert_eq!(today_summary(3, 2), "3 tareas y 2 notas para hoy");
+    }
 }

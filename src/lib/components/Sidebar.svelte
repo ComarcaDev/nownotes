@@ -2,7 +2,7 @@
   import Icon from "./Icon.svelte";
   import { api, type Counts, type Filter, type List, type TagCount } from "../api";
   import { confirmDanger } from "../confirm";
-  import { INBOX_ID } from "../items";
+  import { INBOX_ID, todayBreakdown } from "../items";
   import { keys, display } from "../keys.svelte";
   import { safe } from "../safe";
 
@@ -42,6 +42,8 @@
 
   // «Completadas» no muestra contador: no es trabajo pendiente.
   const countFor = (v: (typeof smart)[number]["view"]) => (v === "done" ? 0 : counts[v]);
+  // «Hoy» mezcla tareas y notas: el desglose aparece al pasar el ratón.
+  const detailFor = (v: (typeof smart)[number]["view"]) => (v === "today" ? todayBreakdown(counts) : "");
 
   let adding = $state(false);
   let newName = $state("");
@@ -97,11 +99,12 @@
   <nav>
     {#each smart as s (s.view)}
       {@const n = countFor(s.view)}
+      {@const detail = n > 0 ? detailFor(s.view) : ""}
       <button
         class="nav"
         class:active={filter.view === s.view && !search}
-        title={compact ? s.label : undefined}
-        aria-label={compact ? s.label : undefined}
+        title={compact ? (detail ? `${s.label}: ${detail}` : s.label) : detail || undefined}
+        aria-label={detail ? `${s.label}: ${detail}` : compact ? s.label : undefined}
         onclick={() => onselect({ view: s.view })}
       >
         <Icon name={s.icon} />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Item } from "./api";
-import { displayTitle, parseTags, quoted, toInput } from "./items";
+import { displayTitle, parseTags, quoted, toInput, todayBreakdown } from "./items";
 import { renderMarkdown, toggleCheckLine } from "./markdown";
 import { isNewer } from "./updates";
 
@@ -61,5 +61,14 @@ describe("items", () => {
     const input = toInput(item, { title: "Pan integral" });
     expect(input).toMatchObject({ id: 5, kind: "task", title: "Pan integral", listId: 1, tags: ["casa"] });
     expect(toInput(item).title).toBe("Comprar pan");
+  });
+});
+
+describe("todayBreakdown", () => {
+  it("desglosa tareas y notas de Hoy", () => {
+    expect(todayBreakdown({ today: 2, todayTasks: 1 })).toBe("1 tarea · 1 nota");
+    expect(todayBreakdown({ today: 3, todayTasks: 3 })).toBe("3 tareas");
+    expect(todayBreakdown({ today: 2, todayTasks: 0 })).toBe("2 notas");
+    expect(todayBreakdown({ today: 0, todayTasks: 0 })).toBe("");
   });
 });

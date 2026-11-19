@@ -142,8 +142,12 @@ pub struct TagCount {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Counts {
+    /// Todo lo que muestra «Hoy»: tareas que vencen hoy o antes + notas creadas hoy.
     pub today: i64,
+    /// Solo las tareas de «Hoy».
+    pub today_tasks: i64,
     pub upcoming: i64,
     pub tasks: i64,
     pub notes: i64,
@@ -737,23 +741,28 @@ pub fn list_tags(c: &Connection) -> R<Vec<TagCount>> {
 
 pub fn counts(c: &Connection, end_of_today: i64) -> R<Counts> {
     c.query_row(
+        // Mismas condiciones que la vista «today» de `query_items`.
         "SELECT
            SUM(d IS NULL AND kind='task' AND done=0 AND COALESCE(due_at, remind_at) <= ?1),
+           SUM(d IS NULL AND kind='note' AND done=0 AND created_at >= ?2),
            SUM(d IS NULL AND kind='task' AND done=0 AND COALESCE(due_at, remind_at) > ?1),
            SUM(d IS NULL AND kind='task' AND done=0),
            SUM(d IS NULL AND kind='note' AND done=0),
            SUM(d IS NULL AND done=1),
            SUM(d IS NOT NULL)
          FROM (SELECT *, deleted_at AS d FROM items)",
-        [end_of_today],
+        [end_of_today, start_of_day(end_of_today)],
         |r| {
+            let n = |i: usize| r.get::<_, Option<i64>>(i).map(|v| v.unwrap_or(0));
+            let today_tasks = n(0)?;
             Ok(Counts {
-                today: r.get::<_, Option<i64>>(0)?.unwrap_or(0),
-                upcoming: r.get::<_, Option<i64>>(1)?.unwrap_or(0),
-                tasks: r.get::<_, Option<i64>>(2)?.unwrap_or(0),
-                notes: r.get::<_, Option<i64>>(3)?.unwrap_or(0),
-                done: r.get::<_, Option<i64>>(4)?.unwrap_or(0),
-                trash: r.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                today: today_tasks + n(1)?,
+                today_tasks,
+                upcoming: n(2)?,
+                tasks: n(3)?,
+                notes: n(4)?,
+                done: n(5)?,
+                trash: n(6)?,
             })
         },
     )
@@ -946,7 +955,10 @@ mod tests {
         let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
         assert_eq!(titles, vec!["Tarea de hoy", "Idea de hoy"]); // tareas primero
         assert_eq!(items[1].id, today.id);
-        assert_eq!(counts(&c, eot).unwrap().today, 1); // el contador solo cuenta tareas
+        // El contador coincide con lo que muestra la vista.
+        let n = counts(&c, eot).unwrap();
+        assert_eq!(n.today, items.len() as i64);
+        assert_eq!(n.today_tasks, 1);
     }
 
     #[test]

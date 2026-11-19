@@ -39,7 +39,7 @@ export interface ItemInput {
 
 export interface List { id: number; name: string; color: string; sort: number; count: number }
 export interface TagCount { name: string; count: number }
-export interface Counts { today: number; upcoming: number; tasks: number; notes: number; done: number; trash: number }
+export interface Counts { today: number; todayTasks: number; upcoming: number; tasks: number; notes: number; done: number; trash: number }
 export interface Filter { view: View; listId?: number | null; tag?: string | null; search?: string | null }
 export type Settings = Record<string, string>;
 export interface Info {

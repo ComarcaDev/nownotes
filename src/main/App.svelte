@@ -8,7 +8,7 @@
   import type { ItemActions, MenuAction } from "../lib/actions";
   import { showToast } from "../lib/toast.svelte";
   import { fmt } from "../lib/dates";
-  import { quoted, toInput } from "../lib/items";
+  import { quoted, toInput, todayBreakdown } from "../lib/items";
   import { toggleCheckLine } from "../lib/markdown";
   import { safe } from "../lib/safe";
   import { getInfo } from "../lib/info";
@@ -33,7 +33,7 @@
   let items = $state<Item[]>([]);
   let lists = $state<List[]>([]);
   let tags = $state<TagCount[]>([]);
-  let counts = $state<Counts>({ today: 0, upcoming: 0, tasks: 0, notes: 0, done: 0, trash: 0 });
+  let counts = $state<Counts>({ today: 0, todayTasks: 0, upcoming: 0, tasks: 0, notes: 0, done: 0, trash: 0 });
   let selectedId = $state<number | null>(null);
   let selectedItem = $state<Item | null>(null);
   let showSettings = $state(false);
@@ -318,12 +318,13 @@
       <div class="tabs" role="tablist" in:fade={{ duration: 120 }}>
         {#each MINI_TABS as t (t.view)}
           {@const n = counts[t.view]}
+          {@const detail = t.view === "today" && n > 0 ? todayBreakdown(counts) : ""}
           <button
             role="tab"
             class="tab"
             class:active={filter.view === t.view}
             aria-selected={filter.view === t.view}
-            title={t.label}
+            title={detail ? `${t.label}: ${detail}` : t.label}
             onclick={() => { filter = { view: t.view }; closeEditor(); }}
           >
             <Icon name={t.icon} size={15} />

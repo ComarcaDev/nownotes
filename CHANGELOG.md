@@ -2,6 +2,12 @@
 
 Todos los cambios relevantes de NowNotes (antes «Apunta») se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [2.0.2] - 2026-11-19
+
+### Corregido
+- **El contador de «Hoy» incluye las notas de hoy**: ahora coincide con lo que muestra la vista (antes solo contaba tareas). Al pasar el ratón se ve el desglose, por ejemplo «1 tarea · 1 nota».
+- El tooltip de la bandeja también lo indica: «1 tarea y 1 nota para hoy».
+
 ## [2.0.1] - 2026-11-19
 
 ### Cambiado
@@ -101,6 +107,7 @@ Primera versión estable.
 ### Distribución
 - Instalador NSIS para el usuario actual (sin permisos de administrador) y versión portable en .zip, que guarda los datos junto al ejecutable.
 
+[2.0.2]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.2
 [2.0.1]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.1
 [2.0.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.0
 [1.2.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.2.0

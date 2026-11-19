@@ -1,5 +1,5 @@
 // Utilidades comunes sobre tareas y notas.
-import type { Item, ItemInput } from "./api";
+import type { Counts, Item, ItemInput } from "./api";
 
 /** La «Bandeja de entrada» es la lista 1 (no se puede borrar). */
 export const INBOX_ID = 1;
@@ -38,4 +38,15 @@ export function toInput(it: Item, patch: Partial<ItemInput> = {}): ItemInput {
     tags: it.tags,
     ...patch,
   };
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Desglose del contador de «Hoy»: «1 tarea · 2 notas». Vacío si no hay nada. */
+export function todayBreakdown(c: Pick<Counts, "today" | "todayTasks">): string {
+  const notes = c.today - c.todayTasks;
+  return [
+    c.todayTasks > 0 ? plural(c.todayTasks, "tarea", "tareas") : "",
+    notes > 0 ? plural(notes, "nota", "notas") : "",
+  ].filter(Boolean).join(" · ");
 }
