@@ -7,8 +7,8 @@
 **Notas y tareas rápidas para Windows, con recordatorios.**
 Ligera (unos 2 MB), moderna y sin cuentas: todo se guarda en tu equipo.
 
-[![CI](https://github.com/hujeanpaes/nownotes/actions/workflows/ci.yml/badge.svg)](https://github.com/hujeanpaes/nownotes/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/hujeanpaes/nownotes)](https://github.com/hujeanpaes/nownotes/releases/latest)
+[![CI](https://github.com/ComarcaDev/nownotes/actions/workflows/ci.yml/badge.svg)](https://github.com/ComarcaDev/nownotes/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ComarcaDev/nownotes)](https://github.com/ComarcaDev/nownotes/releases/latest)
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
 
 <img src="docs/screenshot.png" width="640" alt="NowNotes en modo completo" />&nbsp;&nbsp;<img src="docs/screenshot-mini.png" width="235" alt="NowNotes en modo mínimo" />
@@ -35,7 +35,7 @@ Ligera (unos 2 MB), moderna y sin cuentas: todo se guarda en tu equipo.
 
 ## Descarga
 
-Descarga la última versión desde **[Releases](https://github.com/hujeanpaes/nownotes/releases/latest)**:
+Descarga la última versión desde **[Releases](https://github.com/ComarcaDev/nownotes/releases/latest)**:
 
 | Archivo | Para quién |
 | --- | --- |
@@ -116,4 +116,4 @@ Si algo falla, los errores quedan en `nownotes.log`, dentro de la carpeta de dat
 
 ## Licencia
 
-[MIT](LICENSE) © 2026 hujeanpaes
+[MIT](LICENSE) © 2026 ComarcaDev

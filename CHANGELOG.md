@@ -2,6 +2,11 @@
 
 Todos los cambios relevantes de NowNotes (antes «Apunta») se documentan aquí. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [2.1.2] - 2026-11-19
+
+### Cambiado
+- El proyecto pasa a la cuenta de GitHub **ComarcaDev** (antes «hujeanpaes»). La comprobación de versiones nuevas, los enlaces y los créditos usan el nombre nuevo. Tus datos y la instalación no cambian.
+
 ## [2.1.1] - 2026-11-19
 
 ### Añadido
@@ -129,11 +134,12 @@ Primera versión estable.
 ### Distribución
 - Instalador NSIS para el usuario actual (sin permisos de administrador) y versión portable en .zip, que guarda los datos junto al ejecutable.
 
-[2.1.1]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.1.1
-[2.1.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.1.0
-[2.0.2]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.2
-[2.0.1]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.1
-[2.0.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v2.0.0
-[1.2.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.2.0
-[1.1.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.1.0
-[1.0.0]: https://github.com/hujeanpaes/nownotes/releases/tag/v1.0.0
+[2.1.2]: https://github.com/ComarcaDev/nownotes/releases/tag/v2.1.2
+[2.1.1]: https://github.com/ComarcaDev/nownotes/releases/tag/v2.1.1
+[2.1.0]: https://github.com/ComarcaDev/nownotes/releases/tag/v2.1.0
+[2.0.2]: https://github.com/ComarcaDev/nownotes/releases/tag/v2.0.2
+[2.0.1]: https://github.com/ComarcaDev/nownotes/releases/tag/v2.0.1
+[2.0.0]: https://github.com/ComarcaDev/nownotes/releases/tag/v2.0.0
+[1.2.0]: https://github.com/ComarcaDev/nownotes/releases/tag/v1.2.0
+[1.1.0]: https://github.com/ComarcaDev/nownotes/releases/tag/v1.1.0
+[1.0.0]: https://github.com/ComarcaDev/nownotes/releases/tag/v1.0.0

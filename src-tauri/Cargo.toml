@@ -1,10 +1,10 @@
 [package]
 name = "nownotes"
-version = "2.1.1"
+version = "2.1.2"
 description = "Notas y tareas rápidas con recordatorios"
-authors = ["hujeanpaes"]
+authors = ["ComarcaDev"]
 license = "MIT"
-repository = "https://github.com/hujeanpaes/nownotes"
+repository = "https://github.com/ComarcaDev/nownotes"
 edition = "2021"
 rust-version = "1.87"
 publish = false

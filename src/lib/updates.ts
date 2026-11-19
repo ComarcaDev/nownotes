@@ -2,7 +2,7 @@
 
 import { DAY_MS } from "./dates";
 
-export const REPO = "hujeanpaes/nownotes";
+export const REPO = "ComarcaDev/nownotes";
 const LAST_CHECK_KEY = "nownotes.lastUpdateCheck";
 
 export interface UpdateInfo { version: string; url: string }

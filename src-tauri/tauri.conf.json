@@ -18,9 +18,9 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "publisher": "hujeanpaes",
-    "copyright": "© 2026 hujeanpaes. Licencia MIT.",
-    "homepage": "https://github.com/hujeanpaes/nownotes",
+    "publisher": "ComarcaDev",
+    "copyright": "© 2026 ComarcaDev. Licencia MIT.",
+    "homepage": "https://github.com/ComarcaDev/nownotes",
     "shortDescription": "Notas y tareas rápidas con recordatorios",
     "longDescription": "NowNotes es una app ligera para Windows para capturar notas y tareas al instante, con recordatorios, repeticiones y atajo global.",
     "icon": [

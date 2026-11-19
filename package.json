@@ -1,13 +1,13 @@
 {
   "name": "nownotes",
   "private": true,
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Notas y tareas rápidas para Windows, con recordatorios.",
   "license": "MIT",
-  "author": "hujeanpaes",
+  "author": "ComarcaDev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hujeanpaes/nownotes.git"
+    "url": "https://github.com/ComarcaDev/nownotes.git"
   },
   "type": "module",
   "scripts": {
